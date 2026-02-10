@@ -227,13 +227,60 @@ function getButton(e) {
   return null;
 }
 
+// --- Debug Toggle Buttons ---
+const debugButtons = {
+  tileGrid: document.getElementById('dbg-tile-grid'),
+  spriteBoxes: document.getElementById('dbg-sprite-boxes'),
+  paletteRegions: document.getElementById('dbg-palette-regions'),
+  scrollSplit: document.getElementById('dbg-scroll-split'),
+  nametableSeam: document.getElementById('dbg-nt-seam'),
+};
+
+function wireDebugButton(name, btnEl) {
+  btnEl.addEventListener('click', () => {
+    const on = renderer.debugOverlay.toggle(name);
+    btnEl.classList.toggle('active', on);
+  });
+}
+
+wireDebugButton('tileGrid', debugButtons.tileGrid);
+wireDebugButton('spriteBoxes', debugButtons.spriteBoxes);
+wireDebugButton('paletteRegions', debugButtons.paletteRegions);
+wireDebugButton('scrollSplit', debugButtons.scrollSplit);
+wireDebugButton('nametableSeam', debugButtons.nametableSeam);
+
 // --- Debug API ---
 window.nesDebug = {
   showTileGrid() {
-    renderer.viewport.classList.toggle('debug-tile-grid');
+    const on = renderer.debugOverlay.toggle('tileGrid');
+    debugButtons.tileGrid.classList.toggle('active', on);
   },
   showSpriteBoxes() {
-    renderer.spriteLayer.spriteLayer.classList.toggle('debug-sprite-boxes');
+    const on = renderer.debugOverlay.toggle('spriteBoxes');
+    debugButtons.spriteBoxes.classList.toggle('active', on);
+  },
+  showPaletteRegions() {
+    const on = renderer.debugOverlay.toggle('paletteRegions');
+    debugButtons.paletteRegions.classList.toggle('active', on);
+  },
+  showScrollSplit() {
+    const on = renderer.debugOverlay.toggle('scrollSplit');
+    debugButtons.scrollSplit.classList.toggle('active', on);
+  },
+  showNametableSeam() {
+    const on = renderer.debugOverlay.toggle('nametableSeam');
+    debugButtons.nametableSeam.classList.toggle('active', on);
+  },
+  toggleAll() {
+    const names = ['tileGrid', 'spriteBoxes', 'paletteRegions', 'scrollSplit', 'nametableSeam'];
+    // If any are active, turn all off; otherwise turn all on
+    const anyActive = names.some(n => renderer.debugOverlay.isActive(n));
+    for (const name of names) {
+      if (renderer.debugOverlay.isActive(name) === anyActive) {
+        const on = renderer.debugOverlay.toggle(name);
+        debugButtons[name].classList.toggle('active', on);
+      }
+    }
   },
   highlightPalette(group) {
     console.log('BG palette group', group, ':', renderer.paletteManager.getBgPaletteGroup(group));

@@ -6,6 +6,7 @@ import { PaletteManager } from './palette-manager.js';
 import { TileCache } from './tile-cache.js';
 import { BGLayer } from './bg-layer.js';
 import { SpriteLayer } from './sprite-layer.js';
+import { DebugOverlay } from './debug-overlay.js';
 
 export class CSSRenderer {
   constructor(wrapperEl) {
@@ -23,6 +24,7 @@ export class CSSRenderer {
     this.tileCache = new TileCache();
     this.bgLayer = new BGLayer(this.viewport);
     this.spriteLayer = new SpriteLayer(this.viewport);
+    this.debugOverlay = new DebugOverlay(this.viewport);
 
     this.frameCount = 0;
   }
@@ -39,7 +41,8 @@ export class CSSRenderer {
       ppuState.ptTile,
       this.paletteManager,
       ppuState.bgPatternBase,
-      ppuState.sprPatternBase
+      ppuState.sprPatternBase,
+      ppuState.chrBankSignature
     );
 
     // 3. Update BG layer
@@ -61,6 +64,9 @@ export class CSSRenderer {
     this.viewport.dataset.sprPatternTable = ppuState.sprPatternBase === 0 ? '$0000' : '$1000';
     this.viewport.dataset.spriteSize = ppuState.spriteSize === 0 ? '8x8' : '8x16';
     this.viewport.dataset.mirroring = ppuState.mirrorMap.join(',');
+
+    // 7. Update debug overlays
+    this.debugOverlay.update(ppuState);
 
     this.frameCount++;
   }

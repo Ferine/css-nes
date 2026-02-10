@@ -180,7 +180,7 @@ h1 {
   display: block;
 }
 
-/* Debug overlays */
+/* Debug overlays (legacy) */
 .debug-tile-grid .bg-tile {
   outline: 1px solid rgba(255, 255, 0, 0.3);
 }
@@ -188,6 +188,130 @@ h1 {
 .debug-sprite-boxes .sprite,
 .debug-sprite-boxes .sprite-8x16 {
   outline: 1px solid rgba(255, 0, 0, 0.5);
+}
+
+/* --- New debug overlay layers --- */
+
+.debug-overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* 1. Tile Grid — red 1px lines every 8px */
+.debug-overlay-tile-grid {
+  width: 256px;
+  height: 240px;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  background:
+    repeating-linear-gradient(to right, rgba(255, 0, 0, 0.4) 0 1px, transparent 1px 8px),
+    repeating-linear-gradient(to bottom, rgba(255, 0, 0, 0.4) 0 1px, transparent 1px 8px);
+}
+
+/* 2. Sprite Bounding Boxes — green outlines + OAM index labels */
+.debug-sprite-labels .sprite,
+.debug-sprite-labels .sprite-8x16 {
+  outline: 1px solid rgba(0, 255, 0, 0.6);
+}
+
+.debug-sprite-labels .sprite::after,
+.debug-sprite-labels .sprite-8x16::after {
+  content: attr(data-idx);
+  position: absolute;
+  top: -8px;
+  left: 0;
+  font-size: 5px;
+  line-height: 7px;
+  padding: 0 1px;
+  background: rgba(0, 180, 0, 0.8);
+  color: #fff;
+  font-family: monospace;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 3. Palette Regions — 16×15 grid of 16px colored blocks */
+.debug-overlay-palette-regions {
+  width: 256px;
+  height: 240px;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: repeat(16, 16px);
+  grid-template-rows: repeat(15, 16px);
+}
+
+.palette-block {
+  width: 16px;
+  height: 16px;
+}
+
+/* 4. Scroll Split — horizontal red/yellow dashed line */
+.debug-overlay-scroll-split {
+  width: 256px;
+  height: 2px;
+  top: 0;
+  left: 0;
+  z-index: 101;
+  border-top: 2px dashed rgba(255, 100, 0, 0.8);
+  background: none;
+}
+
+/* 5. Nametable Seam — vertical/horizontal cyan dashed lines */
+.debug-overlay-nt-seam-v {
+  width: 1px;
+  height: 240px;
+  top: 0;
+  left: 0;
+  z-index: 101;
+  border-left: 1px dashed rgba(0, 255, 255, 0.8);
+}
+
+.debug-overlay-nt-seam-h {
+  width: 256px;
+  height: 1px;
+  top: 0;
+  left: 0;
+  z-index: 101;
+  border-top: 1px dashed rgba(0, 255, 255, 0.8);
+}
+
+/* Debug toggle buttons */
+.debug-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.debug-controls span {
+  font-size: 0.75rem;
+  color: #888;
+  margin-right: 4px;
+}
+
+.debug-controls button {
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #4a4a6a;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.75rem;
+}
+
+.debug-controls button:hover {
+  background: #3a3a5a;
+}
+
+.debug-controls button.active {
+  background: #3a5a3a;
+  border-color: #5a8a5a;
+  color: #7fdbca;
 }
 
 /* Status */
