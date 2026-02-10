@@ -160,6 +160,33 @@ describe('PPUStateExtractor', () => {
     expect(state.nameTables[1].attrib[0]).toBe(3);
   });
 
+  it('extracts chrBankSignature as 8 Tile refs from 1KB regions', () => {
+    const nes = createMockNES();
+    const state = new PPUStateExtractor(nes).extract();
+
+    expect(state.chrBankSignature).toHaveLength(8);
+    // Each entry is the first Tile of its 1KB region
+    for (let i = 0; i < 8; i++) {
+      expect(state.chrBankSignature[i]).toBe(nes.ppu.ptTile[i * 64]);
+    }
+  });
+
+  it('chrBankSignature changes when ptTile entries are replaced', () => {
+    const nes = createMockNES();
+    const extractor = new PPUStateExtractor(nes);
+
+    const state1 = extractor.extract();
+    const origRef = state1.chrBankSignature[0];
+
+    // Simulate a bank switch: replace the first tile object
+    const newTile = { pix: new Uint8Array(64).fill(1) };
+    nes.ppu.ptTile[0] = newTile;
+
+    const state2 = extractor.extract();
+    expect(state2.chrBankSignature[0]).toBe(newTile);
+    expect(state2.chrBankSignature[0]).not.toBe(origRef);
+  });
+
   it('passes through spriteSize, spr0HitY, and buffer', () => {
     const nes = createMockNES();
     nes.ppu.f_spriteSize = 1;

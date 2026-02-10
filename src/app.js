@@ -28,6 +28,7 @@ function initNES() {
 // --- Renderer Setup ---
 const wrapperEl = document.getElementById('viewport-wrapper');
 renderer = new CSSRenderer(wrapperEl);
+renderer.initAnnotation(() => latestPPUState);
 
 // --- Canvas mode ---
 const compareCanvas = document.getElementById('compare-canvas');
@@ -162,7 +163,9 @@ function updateButtonStates() {
 btnPause.addEventListener('click', () => {
   paused = !paused;
   updateButtonStates();
+  renderer.viewport.classList.toggle('paused', paused);
   if (!paused) {
+    renderer.annotationPopover?.dismiss();
     lastFrameTime = performance.now();
     document.getElementById('status-bar').textContent = 'Running';
     rafId = requestAnimationFrame(gameLoop);
@@ -288,6 +291,7 @@ window.nesDebug = {
   },
   get state() { return latestPPUState; },
   get nes() { return nes; },
+  get annotate() { return renderer.annotationPopover; },
 };
 
 updateButtonStates();

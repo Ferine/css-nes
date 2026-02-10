@@ -314,6 +314,81 @@ h1 {
   color: #7fdbca;
 }
 
+/* --- Annotation Popover --- */
+
+/* Enable clicking tiles/sprites when paused */
+.nes-viewport.paused .bg-tile,
+.nes-viewport.paused .sprite,
+.nes-viewport.paused .sprite-8x16 {
+  pointer-events: auto;
+  cursor: crosshair;
+}
+
+/* Popover container */
+.annotation-popover {
+  position: absolute;
+  z-index: 200;
+  background: rgba(20, 20, 40, 0.95);
+  border: 1px solid #7fdbca;
+  padding: 4px 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 5px;
+  line-height: 1.4;
+  color: #e0e0e0;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.annot-header {
+  font-size: 6px;
+  font-weight: bold;
+  color: #7fdbca;
+  margin-bottom: 2px;
+  border-bottom: 1px solid #4a4a6a;
+  padding-bottom: 1px;
+}
+
+.annot-row {
+  margin: 1px 0;
+}
+
+.annot-label {
+  color: #888;
+}
+
+.annot-chr-canvas {
+  margin: 3px 0;
+  text-align: center;
+}
+
+.annot-chr-canvas img {
+  border: 1px solid #4a4a6a;
+}
+
+.annot-palette-swatches {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.annot-swatch {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #666;
+}
+
+/* Highlight outline over clicked element */
+.annotation-highlight {
+  position: absolute;
+  z-index: 150;
+  border: 1px solid cyan;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+
 /* Status */
 .status-bar {
   margin-top: 10px;

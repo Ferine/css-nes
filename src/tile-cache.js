@@ -8,6 +8,12 @@
  *
  * Uses a dynamic <style> element so tile divs reference classes, not inline styles.
  * Palette change = update 1 CSS rule, not 960+ divs.
+ *
+ * CHR bank switching (MMC3 etc.) is detected via chrBankSignature — an array
+ * of Tile object references sampled per 1KB CHR region. When load1kVromBank
+ * replaces Tile objects, the refs change, triggering sheet regeneration for the
+ * affected pattern table. CHR-RAM modifications (in-place pix changes) are
+ * still caught by the FNV-1a checksum fallback.
  */
 export class TileCache {
   constructor() {
@@ -30,53 +36,86 @@ export class TileCache {
     this.styleEl.id = 'tile-cache-styles';
     document.head.appendChild(this.styleEl);
 
-    // CHR tile checksums for dirty detection
+    // CHR tile checksums for dirty detection (CHR-RAM fallback)
     this.tileChecksums = new Uint32Array(512);
+
+    // CHR bank signature — one Tile object ref per 1KB region (8 regions)
+    // Regions 0-3 = pattern table $0000, regions 4-7 = pattern table $1000
+    this.prevBankRefs = new Array(8).fill(null);
 
     // Track which sheets were regenerated this frame
     this.updatedSheets = new Set();
 
     // Previous BG pattern table base
     this.prevBgBase = -1;
+
+    // Consecutive-frame regeneration counter for performance warning
+    this._consecRegenFrames = 0;
   }
 
   /**
-   * Update sheets as needed based on palette and tile changes.
+   * Update sheets as needed based on palette, CHR bank, and tile changes.
    * Sprite sheets are rendered for BOTH banks (0 and 256) because 8×16 sprites
    * select their pattern table per-sprite via tileIndex bit 0.
    * @param {object[]} ptTile - ppu.ptTile array (512 Tile objects with .pix)
    * @param {PaletteManager} paletteManager
    * @param {number} bgBase - 0 or 256
    * @param {number} sprBase - 0 or 256 (kept for API compat, not used for sheet selection)
+   * @param {object[]|undefined} chrBankSignature - 8 Tile refs, one per 1KB CHR region
    */
-  update(ptTile, paletteManager, bgBase, sprBase) {
+  update(ptTile, paletteManager, bgBase, sprBase, chrBankSignature) {
     this.updatedSheets.clear();
 
     // Check if BG pattern table base changed
     const bgBaseChanged = bgBase !== this.prevBgBase;
     this.prevBgBase = bgBase;
 
-    // Check for CHR tile changes across all 512 tiles
-    const chrDirty = this._checkCHRDirty(ptTile);
+    // --- CHR bank switch detection (fast O(8) identity check) ---
+    // Check each pattern table independently: BG uses bgBase, sprites use both.
+    let bgBankDirty = false;
+    let sprBank0Dirty = false;
+    let sprBank1Dirty = false;
 
-    // Regenerate BG sheets (indices 0-3) for dirty palette groups or CHR changes
+    if (chrBankSignature) {
+      bgBankDirty = this._checkBankDirty(chrBankSignature, bgBase);
+      sprBank0Dirty = this._checkBankDirty(chrBankSignature, 0);
+      sprBank1Dirty = this._checkBankDirty(chrBankSignature, 256);
+      this._updateBankRefs(chrBankSignature);
+    }
+
+    // --- CHR-RAM fallback: per-PT checksum scan ---
+    // Catches in-place pix modifications. Always runs to keep checksums current.
+    const { pt0Dirty: chrDirtyPT0, pt1Dirty: chrDirtyPT1 } = this._checkCHRDirty(ptTile);
+
+    // Combine bank-switch and CHR-RAM dirty signals per pattern table
+    const bgPTIndex = bgBase >= 256 ? 1 : 0;
+    const bgDirty = bgBankDirty || (bgPTIndex === 0 ? chrDirtyPT0 : chrDirtyPT1);
+    const spr0Dirty = sprBank0Dirty || chrDirtyPT0;
+    const spr1Dirty = sprBank1Dirty || chrDirtyPT1;
+
+    // --- Regenerate BG sheets (indices 0-3) ---
     for (let palGroup = 0; palGroup < 4; palGroup++) {
-      if (paletteManager.dirtyBgGroups.has(palGroup) || chrDirty || bgBaseChanged) {
+      if (paletteManager.dirtyBgGroups.has(palGroup) || bgDirty || bgBaseChanged) {
         const colors = paletteManager.getBgPaletteGroup(palGroup);
         this._renderSheet(palGroup, ptTile, bgBase, colors);
         this.updatedSheets.add(palGroup);
       }
     }
 
-    // Regenerate sprite sheets for both banks:
-    //   indices 4-7:  bank 0 (ptTile[0..255])
-    //   indices 8-11: bank 1 (ptTile[256..511])
+    // --- Regenerate sprite sheets, per-bank ---
+    // Bank 0 sheets (indices 4-7): ptTile[0..255]
     for (let palGroup = 0; palGroup < 4; palGroup++) {
-      if (paletteManager.dirtySprGroups.has(palGroup) || chrDirty) {
+      if (paletteManager.dirtySprGroups.has(palGroup) || spr0Dirty) {
         const colors = paletteManager.getSprPaletteGroup(palGroup);
         this._renderSheet(4 + palGroup, ptTile, 0, colors);
-        this._renderSheet(8 + palGroup, ptTile, 256, colors);
         this.updatedSheets.add(4 + palGroup);
+      }
+    }
+    // Bank 1 sheets (indices 8-11): ptTile[256..511]
+    for (let palGroup = 0; palGroup < 4; palGroup++) {
+      if (paletteManager.dirtySprGroups.has(palGroup) || spr1Dirty) {
+        const colors = paletteManager.getSprPaletteGroup(palGroup);
+        this._renderSheet(8 + palGroup, ptTile, 256, colors);
         this.updatedSheets.add(8 + palGroup);
       }
     }
@@ -84,6 +123,19 @@ export class TileCache {
     // Update CSS if any sheets changed
     if (this.updatedSheets.size > 0) {
       this._updateStylesheet();
+    }
+
+    // Performance warning: log if all sheets regenerate every frame
+    if (this.updatedSheets.size === 12) {
+      this._consecRegenFrames++;
+      if (this._consecRegenFrames === 60) {
+        console.warn(
+          'TileCache: all 12 spritesheets regenerated every frame for 60 consecutive frames. ' +
+          'This is expected for CHR bank-switching games (MMC3) but impacts performance.'
+        );
+      }
+    } else {
+      this._consecRegenFrames = 0;
     }
   }
 
@@ -97,21 +149,49 @@ export class TileCache {
   }
 
   /**
-   * Check if any CHR tiles changed (CHR-RAM games / mapper bank switches).
-   * Checks all 512 tiles since 8×16 sprites can use either bank.
+   * Check if any 1KB CHR region changed for a given pattern table base.
+   * Each pattern table (0 or 256 tile index offset) spans 4 × 1KB regions.
+   * Returns true if any region's Tile object reference differs from last frame.
+   */
+  _checkBankDirty(chrBankSignature, ptBase) {
+    const startRegion = ptBase >= 256 ? 4 : 0;
+    for (let i = 0; i < 4; i++) {
+      if (chrBankSignature[startRegion + i] !== this.prevBankRefs[startRegion + i]) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Store the current bank signature for next-frame comparison.
+   */
+  _updateBankRefs(chrBankSignature) {
+    for (let i = 0; i < 8; i++) {
+      this.prevBankRefs[i] = chrBankSignature[i];
+    }
+  }
+
+  /**
+   * Check if any CHR tiles changed via content checksums, per pattern table.
+   * Catches CHR-RAM in-place modifications that bank-signature detection misses.
+   * Always updates stored checksums to keep baseline correct.
+   * @returns {{ pt0Dirty: boolean, pt1Dirty: boolean }}
    */
   _checkCHRDirty(ptTile) {
-    let dirty = false;
+    let pt0Dirty = false;
+    let pt1Dirty = false;
     for (let i = 0; i < 512; i++) {
       const tile = ptTile[i];
       if (!tile) continue;
       const checksum = this._hashPix(tile.pix);
       if (checksum !== this.tileChecksums[i]) {
         this.tileChecksums[i] = checksum;
-        dirty = true;
+        if (i < 256) pt0Dirty = true;
+        else pt1Dirty = true;
       }
     }
-    return dirty;
+    return { pt0Dirty, pt1Dirty };
   }
 
   /** Simple FNV-1a-ish hash of a 64-element pix array */

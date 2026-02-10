@@ -47,6 +47,11 @@ export class PPUStateExtractor {
       // Sprite 0 hit (for future scroll split detection)
       spr0HitY: ppu.spr0HitY,
 
+      // CHR bank signature — one Tile object reference per 1KB CHR region.
+      // When load1kVromBank replaces Tile objects, the refs change, enabling
+      // fast O(8) bank-switch detection instead of hashing all tile pixel data.
+      chrBankSignature: this._extractCHRBankSignature(ppu),
+
       // Framebuffer reference for canvas comparison
       buffer: ppu.buffer,
     };
@@ -66,6 +71,20 @@ export class PPUStateExtractor {
       }
     }
     return nts;
+  }
+
+  /**
+   * Sample the first Tile object reference from each 1KB CHR region (64 tiles).
+   * 8 regions: ptTile[0..63], [64..127], [128..191], [192..255],
+   *            [256..319], [320..383], [384..447], [448..511]
+   * Regions 0-3 = pattern table $0000-$0FFF, regions 4-7 = $1000-$1FFF.
+   */
+  _extractCHRBankSignature(ppu) {
+    const refs = new Array(8);
+    for (let i = 0; i < 8; i++) {
+      refs[i] = ppu.ptTile[i * 64];
+    }
+    return refs;
   }
 
   _extractSprites(ppu) {

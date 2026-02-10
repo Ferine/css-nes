@@ -7,6 +7,7 @@ import { TileCache } from './tile-cache.js';
 import { BGLayer } from './bg-layer.js';
 import { SpriteLayer } from './sprite-layer.js';
 import { DebugOverlay } from './debug-overlay.js';
+import { AnnotationPopover } from './annotation-popover.js';
 
 export class CSSRenderer {
   constructor(wrapperEl) {
@@ -25,8 +26,16 @@ export class CSSRenderer {
     this.bgLayer = new BGLayer(this.viewport);
     this.spriteLayer = new SpriteLayer(this.viewport);
     this.debugOverlay = new DebugOverlay(this.viewport);
+    this.annotationPopover = null; // initialized by app.js with PPU state getter
 
     this.frameCount = 0;
+  }
+
+  /**
+   * Initialize annotation popover with a PPU state getter.
+   */
+  initAnnotation(getPPUState) {
+    this.annotationPopover = new AnnotationPopover(this.viewport, this, getPPUState);
   }
 
   /**

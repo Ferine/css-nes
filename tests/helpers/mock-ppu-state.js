@@ -49,5 +49,12 @@ export function createMockPPUState(overrides = {}) {
     buffer: new Uint32Array(256 * 240),
   };
 
+  // chrBankSignature: one Tile ref per 1KB CHR region (8 regions).
+  // Default: sample from the ptTile array (same as PPUStateExtractor does).
+  if (!overrides.chrBankSignature) {
+    const pt = overrides.ptTile || defaults.ptTile;
+    defaults.chrBankSignature = Array.from({ length: 8 }, (_, i) => pt[i * 64]);
+  }
+
   return { ...defaults, ...overrides };
 }
