@@ -1,0 +1,199 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-family: 'Courier New', monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 1.2rem;
+  margin-bottom: 12px;
+  color: #7fdbca;
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.controls button {
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #4a4a6a;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.controls button:hover {
+  background: #3a3a5a;
+}
+
+.controls button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.controls label {
+  cursor: pointer;
+  background: #2a2a4a;
+  border: 1px solid #4a4a6a;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}
+
+.controls label:hover {
+  background: #3a3a5a;
+}
+
+#fps-counter {
+  font-size: 0.85rem;
+  color: #7fdbca;
+  min-width: 80px;
+  text-align: right;
+}
+
+/* Render area — reserves space for the 3x scaled viewport */
+.render-area {
+  width: 768px;   /* 256 * 3 */
+  height: 720px;  /* 240 * 3 */
+  position: relative;
+}
+
+/* Viewport wrapper — applies scale, positioned within the reserved area */
+.viewport-wrapper {
+  transform-origin: top left;
+  transform: scale(3);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* The NES viewport — 256×240 visible area */
+.nes-viewport {
+  width: 256px;
+  height: 240px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+  image-rendering: pixelated;
+}
+
+/* Background layer — holds nametable containers, scrolled via transform */
+.bg-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+}
+
+/* Nametable container — CSS Grid 32 columns */
+.nametable {
+  display: grid;
+  grid-template-columns: repeat(32, 8px);
+  grid-template-rows: repeat(30, 8px);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 256px;
+  height: 240px;
+}
+
+/* Individual BG tile */
+.bg-tile {
+  width: 8px;
+  height: 8px;
+  contain: strict;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: 128px 128px;
+}
+
+/* Sprite layer — absolutely positioned sprites */
+.sprite-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 256px;
+  height: 240px;
+  pointer-events: none;
+}
+
+/* Individual sprite */
+.sprite {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  contain: layout style;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: 128px 128px;
+}
+
+/* 8x16 sprite container */
+.sprite-8x16 {
+  position: absolute;
+  width: 8px;
+  height: 16px;
+  contain: layout style;
+}
+
+.sprite-8x16 .sprite-half {
+  width: 8px;
+  height: 8px;
+  image-rendering: pixelated;
+  background-repeat: no-repeat;
+  background-size: 128px 128px;
+  overflow: hidden;
+}
+
+/* Canvas mode — same position/scale as CSS viewport, swapped via JS */
+.canvas-mode {
+  display: none;
+  image-rendering: pixelated;
+  width: 256px;
+  height: 240px;
+  transform-origin: top left;
+  transform: scale(3);
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.canvas-mode.active {
+  display: block;
+}
+
+/* Debug overlays */
+.debug-tile-grid .bg-tile {
+  outline: 1px solid rgba(255, 255, 0, 0.3);
+}
+
+.debug-sprite-boxes .sprite,
+.debug-sprite-boxes .sprite-8x16 {
+  outline: 1px solid rgba(255, 0, 0, 0.5);
+}
+
+/* Status */
+.status-bar {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: #888;
+  text-align: center;
+}

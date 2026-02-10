@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS-NES</title>
+  <link rel="stylesheet" href="./styles/nes-layers.css">
+</head>
+<body>
+  <h1>CSS-NES — CSS Layer Renderer</h1>
+
+  <div class="controls">
+    <label>
+      Load ROM
+      <input type="file" id="rom-input" accept=".nes" hidden>
+    </label>
+    <button id="btn-pause" disabled>Pause</button>
+    <button id="btn-step" disabled>Step</button>
+    <button id="btn-toggle-canvas" disabled>Show Canvas</button>
+    <span id="fps-counter">-- fps</span>
+  </div>
+
+  <div class="render-area">
+    <div class="viewport-wrapper" id="viewport-wrapper">
+      <!-- CSS renderer mounts here -->
+    </div>
+    <canvas id="compare-canvas" class="canvas-mode" width="256" height="240"></canvas>
+  </div>
+
+  <div class="status-bar" id="status-bar">Drop a .nes ROM or click Load ROM</div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
