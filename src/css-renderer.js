@@ -8,6 +8,10 @@ import { BGLayer } from './bg-layer.js';
 import { SpriteLayer } from './sprite-layer.js';
 import { DebugOverlay } from './debug-overlay.js';
 import { AnnotationPopover } from './annotation-popover.js';
+import { NametableViewer } from './nametable-viewer.js';
+import { PaletteViewer } from './palette-viewer.js';
+import { OAMViewer } from './oam-viewer.js';
+import { CHRViewer } from './chr-viewer.js';
 
 export class CSSRenderer {
   constructor(wrapperEl) {
@@ -28,6 +32,9 @@ export class CSSRenderer {
     this.debugOverlay = new DebugOverlay(this.viewport);
     this.annotationPopover = null; // initialized by app.js with PPU state getter
 
+    // Inspector panels — initialized later via initInspector()
+    this.inspectorPanels = null;
+
     // UI-level layer visibility overrides (independent of PPU flags)
     this.layerVisible = { bg: true, sprites: true };
 
@@ -39,6 +46,18 @@ export class CSSRenderer {
    */
   initAnnotation(getPPUState) {
     this.annotationPopover = new AnnotationPopover(this.viewport, this, getPPUState);
+  }
+
+  /**
+   * Initialize inspector panels (nametable, palette, OAM viewers).
+   */
+  initInspector(inspectorEl) {
+    this.inspectorPanels = {
+      nametable: new NametableViewer(inspectorEl, this),
+      palette: new PaletteViewer(inspectorEl, this),
+      oam: new OAMViewer(inspectorEl, this),
+      chr: new CHRViewer(inspectorEl, this),
+    };
   }
 
   /**
@@ -81,6 +100,14 @@ export class CSSRenderer {
 
     // 7. Update debug overlays
     this.debugOverlay.update(ppuState);
+
+    // 8. Update inspector panels
+    if (this.inspectorPanels) {
+      this.inspectorPanels.nametable.update(ppuState);
+      this.inspectorPanels.palette.update(ppuState);
+      this.inspectorPanels.oam.update(ppuState);
+      this.inspectorPanels.chr.update(ppuState);
+    }
 
     this.frameCount++;
   }

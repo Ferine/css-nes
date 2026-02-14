@@ -107,9 +107,6 @@ h1 {
 #fps-counter {
   font-size: 0.75rem;
   color: #7fdbca;
-  min-width: 56px;
-  text-align: right;
-  padding: 0 2px;
 }
 
 /* Render area — reserves space for the 3x scaled viewport */
@@ -398,10 +395,229 @@ h1 {
   box-sizing: border-box;
 }
 
-/* Status */
+/* --- Inspector Panel --- */
+
+.main-content {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.inspector-panel {
+  background: #12122a;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.7rem;
+  color: #c0c0d0;
+  max-height: 720px;
+  overflow-y: auto;
+  min-width: 260px;
+}
+
+.inspector-panel:empty {
+  display: none;
+}
+
+.inspector-subpanel {
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.inspector-subpanel:last-child {
+  border-bottom: none;
+}
+
+.subpanel-header {
+  font-size: 0.65rem;
+  font-weight: bold;
+  color: #7fdbca;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 8px 4px;
+  border-bottom: 1px solid #2a2a4a;
+  user-select: none;
+}
+
+/* Inspect toggle buttons */
+.inspect-toggle.active {
+  background: #2a3a4a;
+  border-color: #5a8aaa;
+  color: #7fd4ff;
+}
+
+/* Nametable Viewer */
+.nt-canvas {
+  display: block;
+  width: 256px;
+  height: 240px;
+  image-rendering: pixelated;
+}
+
+/* Palette Viewer */
+.pal-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  transition: background 0.15s;
+}
+
+.pal-row.pal-dirty {
+  background: rgba(127, 219, 202, 0.12);
+}
+
+.pal-label {
+  width: 36px;
+  font-size: 0.6rem;
+  color: #888;
+  flex-shrink: 0;
+}
+
+.pal-swatch {
+  width: 20px;
+  height: 16px;
+  border: 1px solid #3a3a5a;
+  border-radius: 2px;
+  transition: background-color 0.1s;
+}
+
+/* OAM Viewer */
+.oam-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.oam-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.6rem;
+}
+
+.oam-table th {
+  position: sticky;
+  top: 0;
+  background: #1a1a30;
+  color: #7fdbca;
+  font-weight: normal;
+  text-align: left;
+  padding: 3px 4px;
+  font-size: 0.6rem;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.oam-table td {
+  padding: 2px 4px;
+  border-bottom: 1px solid #1a1a30;
+}
+
+.oam-table tr:hover {
+  background: rgba(127, 212, 255, 0.08);
+}
+
+.oam-table tr.oam-offscreen {
+  opacity: 0.3;
+}
+
+/* OAM highlight on sprites in viewport */
+.sprite.oam-highlight,
+.sprite-8x16.oam-highlight {
+  outline: 2px solid #7fd4ff;
+  outline-offset: -1px;
+  z-index: 90;
+}
+
+/* CHR Viewer */
+.chr-controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  align-items: center;
+}
+
+.chr-controls button {
+  background: #2a2a4a;
+  color: #c0c0d0;
+  border: 1px solid transparent;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.6rem;
+  border-radius: 2px;
+}
+
+.chr-controls button:hover {
+  background: #3a3a5a;
+  border-color: #5a5a7a;
+}
+
+.chr-controls button.active {
+  background: #2a3a4a;
+  border-color: #5a8aaa;
+  color: #7fd4ff;
+}
+
+.chr-tables {
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px 8px;
+}
+
+.chr-table-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.chr-table-label {
+  font-size: 0.55rem;
+  color: #666;
+}
+
+.chr-canvas {
+  width: 192px;
+  height: 192px;
+  image-rendering: pixelated;
+  border: 1px solid #2a2a4a;
+  background: #000;
+}
+
+.chr-tooltip {
+  font-size: 0.6rem;
+  color: #7fdbca;
+  padding: 2px 8px 4px;
+}
+
+/* Status bar / footer */
 .status-bar {
   margin-top: 10px;
   font-size: 0.75rem;
   color: #888;
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 1100px;
 }
+
+.status-counters {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.status-counters > span {
+  padding: 0 6px;
+  border-left: 1px solid #2a2a4a;
+}
+
+.status-counters > span:first-child {
+  border-left: none;
+}
+
+.stat-dim { color: #888; }
+.stat-green { color: #7fdbca; }
+.stat-yellow { color: #dbc67f; }
+.stat-red { color: #db7f7f; }
+.stat-blue { color: #7fb8db; }

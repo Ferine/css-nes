@@ -18,7 +18,6 @@
       <button id="btn-pause" disabled>Pause</button>
       <button id="btn-step" disabled>Step</button>
       <button id="btn-toggle-canvas" disabled>Canvas Mode</button>
-      <span id="fps-counter">-- fps</span>
     </div>
 
     <div class="toolbar-group">
@@ -35,16 +34,36 @@
       <button id="dbg-scroll-split" class="debug-toggle" title="Scroll split line [4]">Split</button>
       <button id="dbg-nt-seam" class="debug-toggle" title="Nametable seam lines [5]">Seam</button>
     </div>
-  </div>
 
-  <div class="render-area">
-    <div class="viewport-wrapper" id="viewport-wrapper">
-      <!-- CSS renderer mounts here -->
+    <div class="toolbar-group">
+      <span class="group-label">Inspect</span>
+      <button id="inspect-nt" class="inspect-toggle" title="Nametable map [N]">NT Map</button>
+      <button id="inspect-pal" class="inspect-toggle" title="Palette viewer [P]">Palette</button>
+      <button id="inspect-oam" class="inspect-toggle" title="OAM table [O]">OAM</button>
+      <button id="inspect-chr" class="inspect-toggle" title="CHR pattern tables [C]">CHR</button>
     </div>
-    <canvas id="compare-canvas" class="canvas-mode" width="256" height="240"></canvas>
   </div>
 
-  <div class="status-bar" id="status-bar">Drop a .nes ROM or click Load ROM · Keys: arrows, Z=A, X=B, Enter=Start, RShift=Select</div>
+  <div class="main-content">
+    <div class="render-area">
+      <div class="viewport-wrapper" id="viewport-wrapper">
+        <!-- CSS renderer mounts here -->
+      </div>
+      <canvas id="compare-canvas" class="canvas-mode" width="256" height="240"></canvas>
+    </div>
+    <div class="inspector-panel" id="inspector-panel"></div>
+  </div>
+
+  <div class="status-bar">
+    <span id="status-bar">Drop a .nes ROM or click Load ROM · Keys: arrows, Z=A, X=B, Enter=Start, RShift=Select</span>
+    <span class="status-counters">
+      <span id="fps-counter">-- fps</span>
+      <span id="mut-counter" class="stat-dim">-- mut</span>
+      <span id="dom-counter" class="stat-dim">-- nodes</span>
+      <span id="spr-counter" class="stat-dim">-- spr</span>
+      <span id="sheet-counter" class="stat-dim">-- sheets</span>
+    </span>
+  </div>
 
   <script type="module" src="./src/app.js"></script>
 </body>

@@ -4,6 +4,7 @@
 import { NES } from 'jsnes';
 import { PPUStateExtractor } from './ppu-state-extractor.js';
 import { CSSRenderer } from './css-renderer.js';
+import { MutationCounter } from './mutation-counter.js';
 
 // --- NES Setup ---
 let nes;
@@ -29,6 +30,14 @@ function initNES() {
 const wrapperEl = document.getElementById('viewport-wrapper');
 renderer = new CSSRenderer(wrapperEl);
 renderer.initAnnotation(() => latestPPUState);
+renderer.initInspector(document.getElementById('inspector-panel'));
+
+// --- Stats counters ---
+const mutCounter = new MutationCounter(renderer.viewport);
+const mutEl = document.getElementById('mut-counter');
+const domEl = document.getElementById('dom-counter');
+const sprEl = document.getElementById('spr-counter');
+const sheetEl = document.getElementById('sheet-counter');
 
 // --- Canvas mode ---
 const compareCanvas = document.getElementById('compare-canvas');
@@ -58,6 +67,38 @@ let rafId = null;
 
 const fpsEl = document.getElementById('fps-counter');
 
+function updateStats(mutCount, domNodes, visSprites, sheetRegens) {
+  if (mutCount === null) {
+    // Canvas mode / inactive — dim everything
+    mutEl.textContent = '-- mut';
+    mutEl.className = 'stat-dim';
+    domEl.textContent = '-- nodes';
+    domEl.className = 'stat-dim';
+    sprEl.textContent = '-- spr';
+    sprEl.className = 'stat-dim';
+    sheetEl.textContent = '-- sheets';
+    sheetEl.className = 'stat-dim';
+    return;
+  }
+
+  // Mutations
+  mutEl.textContent = MutationCounter.format(mutCount) + ' mut';
+  mutEl.className = mutCount > 3000 ? 'stat-red' : mutCount >= 1000 ? 'stat-yellow' : 'stat-green';
+
+  // DOM node count
+  const domLabel = domNodes >= 1000 ? (domNodes / 1000).toFixed(1) + 'k' : String(domNodes);
+  domEl.textContent = domLabel + ' nodes';
+  domEl.className = domNodes > 5000 ? 'stat-red' : domNodes >= 2000 ? 'stat-yellow' : 'stat-green';
+
+  // Visible sprites
+  sprEl.textContent = visSprites + ' spr';
+  sprEl.className = visSprites > 0 ? 'stat-blue' : 'stat-dim';
+
+  // Sheet regenerations
+  sheetEl.textContent = sheetRegens + '/12 sheets';
+  sheetEl.className = sheetRegens >= 12 ? 'stat-red' : sheetRegens > 0 ? 'stat-yellow' : 'stat-green';
+}
+
 function gameLoop(timestamp) {
   if (!running || paused) return;
 
@@ -76,8 +117,15 @@ function gameLoop(timestamp) {
   if (latestPPUState) {
     if (canvasMode) {
       renderCanvasFrame(latestPPUState.buffer);
+      mutCounter.snapshot();
+      updateStats(null, 0, 0, 0);
     } else {
       renderer.renderFrame(latestPPUState);
+      const mutCount = mutCounter.snapshot();
+      const domNodes = renderer.viewport.getElementsByTagName('*').length;
+      const visSprites = latestPPUState.sprites.filter(s => s.y > 0 && s.y < 239).length;
+      const sheetRegens = renderer.tileCache.updatedSheets.size;
+      updateStats(mutCount, domNodes, visSprites, sheetRegens);
     }
   }
 
@@ -271,6 +319,26 @@ wireDebugButton('paletteRegions', debugButtons.paletteRegions);
 wireDebugButton('scrollSplit', debugButtons.scrollSplit);
 wireDebugButton('nametableSeam', debugButtons.nametableSeam);
 
+// --- Inspector Toggle Buttons ---
+const inspectButtons = {
+  nametable: document.getElementById('inspect-nt'),
+  palette: document.getElementById('inspect-pal'),
+  oam: document.getElementById('inspect-oam'),
+  chr: document.getElementById('inspect-chr'),
+};
+
+function wireInspectButton(name, btnEl) {
+  btnEl.addEventListener('click', () => {
+    const on = renderer.inspectorPanels[name].toggle();
+    btnEl.classList.toggle('active', on);
+  });
+}
+
+wireInspectButton('nametable', inspectButtons.nametable);
+wireInspectButton('palette', inspectButtons.palette);
+wireInspectButton('oam', inspectButtons.oam);
+wireInspectButton('chr', inspectButtons.chr);
+
 // --- Keyboard Shortcuts ---
 const debugShortcuts = {
   '1': 'tileGrid',
@@ -278,6 +346,13 @@ const debugShortcuts = {
   '3': 'paletteRegions',
   '4': 'scrollSplit',
   '5': 'nametableSeam',
+};
+
+const inspectShortcuts = {
+  'n': 'nametable',
+  'p': 'palette',
+  'o': 'oam',
+  'c': 'chr',
 };
 
 document.addEventListener('keydown', (e) => {
@@ -299,6 +374,14 @@ document.addEventListener('keydown', (e) => {
   if (dbgName) {
     const on = renderer.debugOverlay.toggle(dbgName);
     debugButtons[dbgName].classList.toggle('active', on);
+    return;
+  }
+
+  // Inspector panel shortcuts
+  const inspName = inspectShortcuts[e.key.toLowerCase()];
+  if (inspName) {
+    const on = renderer.inspectorPanels[inspName].toggle();
+    inspectButtons[inspName].classList.toggle('active', on);
     return;
   }
 });

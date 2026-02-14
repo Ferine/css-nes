@@ -13,6 +13,7 @@ Every frame of NES gameplay maintains:
 - **~30 data attributes per visible element** — VRAM addresses, tile indices in hex, palette groups, pixel coordinates, flip state, priority, OAM addresses
 - **1 `<style>` tag rewritten at runtime** — because updating a CSS rule is faster than touching 960 `div.style.backgroundImage` properties
 - **5 debug overlay layers** — tile grid, sprite bounding boxes with OAM indices, palette region heatmap, sprite-0 scroll split line, nametable seam markers
+- **3 inspector panels** — nametable minimap, palette swatch viewer, OAM sprite table with hover-to-highlight
 
 A normal renderer writes 61,440 pixel values to a framebuffer. This one maintains a living DOM tree where the browser's layout engine does the compositing. The Chrome DevTools Elements panel becomes a PPU debugger.
 
@@ -39,6 +40,8 @@ Drop a `.nes` ROM file onto the page or use the Load ROM button.
 | Right Shift | Select |
 | Enter | Start |
 
+**Debug & Inspector Shortcuts:** `B` BG layer, `S` Sprites, `1-5` debug overlays, `N` nametable map, `P` palette viewer, `O` OAM table.
+
 ## How It Works
 
 The renderer reads PPU structural state directly from `nes.ppu` — nametables, OAM, pattern tables, palettes, scroll registers — rather than the framebuffer. This state drives a layered CSS rendering pipeline:
@@ -50,6 +53,7 @@ nes.frame() -> onFrame -> PPUStateExtractor.extract()
   -> BGLayer            (4 nametable quadrants as 32x30 CSS Grids, diff updates)
   -> SpriteLayer        (64 absolutely-positioned sprite divs)
   -> DebugOverlay       (5 toggleable visualization layers)
+  -> InspectorPanels    (nametable map, palette viewer, OAM table)
 ```
 
 **Spritesheets, not inline styles.** The TileCache generates 12 PNG spritesheets (4 BG + 4 sprite bank 0 + 4 sprite bank 1) and injects them via a dynamic `<style>` element. Palette change = 1 CSS rule update, not 960 divs.
@@ -81,6 +85,18 @@ Five toggleable overlay layers, accessible via toolbar buttons or the console AP
 | **Palette Regions** | Color-coded 16x16 blocks showing attribute table palette assignments |
 | **Scroll Split** | Orange dashed line at sprite-0 hit scanline |
 | **NT Seam** | Cyan dashed lines at nametable boundaries within the viewport |
+
+## Inspector Panels
+
+Three real-time inspector panels live in a collapsible side panel to the right of the viewport. Toggle them via toolbar buttons or keyboard shortcuts:
+
+| Panel | Shortcut | Description |
+|-------|----------|-------------|
+| **NT Map** | `N` | 512x480 nametable minimap drawn from TileCache spritesheets, with a scroll-position rectangle that wraps correctly across all 4 quadrants |
+| **Palette** | `P` | 8 palette groups (4 BG + 4 SPR) as color swatches; dirty groups flash briefly on change |
+| **OAM** | `O` | 64-row sprite table showing tile index, position, palette, and flip/priority flags; hover a row to highlight the sprite in the viewport |
+
+Panels are independently toggleable and stack vertically. The side panel auto-hides when all panels are closed.
 
 ## DevTools Inspection
 
@@ -128,6 +144,9 @@ css-nes/
     ├── sprite-layer.js        # 64 sprite divs, 8x8 + 8x16 support
     ├── debug-overlay.js       # 5 toggleable visual debug layers
     ├── annotation-popover.js  # Click-to-inspect PPU annotation popover
+    ├── nametable-viewer.js    # Inspector: 4-quadrant nametable minimap canvas
+    ├── palette-viewer.js      # Inspector: 8 palette groups as color swatches
+    ├── oam-viewer.js          # Inspector: 64-sprite OAM table with hover highlight
     ├── css-renderer.js        # Orchestrates layers, owns viewport
     └── app.js                 # jsnes integration, game loop, input, ROM loading
 ```
