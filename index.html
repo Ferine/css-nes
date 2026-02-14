@@ -9,24 +9,32 @@
 <body>
   <h1>CSS-NES — CSS Layer Renderer</h1>
 
-  <div class="controls">
-    <label>
-      Load ROM
-      <input type="file" id="rom-input" accept=".nes" hidden>
-    </label>
-    <button id="btn-pause" disabled>Pause</button>
-    <button id="btn-step" disabled>Step</button>
-    <button id="btn-toggle-canvas" disabled>Show Canvas</button>
-    <span id="fps-counter">-- fps</span>
-  </div>
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <label class="rom-label">
+        Load ROM
+        <input type="file" id="rom-input" accept=".nes" hidden>
+      </label>
+      <button id="btn-pause" disabled>Pause</button>
+      <button id="btn-step" disabled>Step</button>
+      <button id="btn-toggle-canvas" disabled>Canvas Mode</button>
+      <span id="fps-counter">-- fps</span>
+    </div>
 
-  <div class="debug-controls">
-    <span>Debug:</span>
-    <button id="dbg-tile-grid">Tile Grid</button>
-    <button id="dbg-sprite-boxes">Sprite Boxes</button>
-    <button id="dbg-palette-regions">Palette Regions</button>
-    <button id="dbg-scroll-split">Scroll Split</button>
-    <button id="dbg-nt-seam">NT Seam</button>
+    <div class="toolbar-group">
+      <span class="group-label">Layers</span>
+      <button id="layer-bg" class="layer-toggle active" title="Toggle background layer [B]">BG</button>
+      <button id="layer-sprites" class="layer-toggle active" title="Toggle sprite layer [S]">Sprites</button>
+    </div>
+
+    <div class="toolbar-group">
+      <span class="group-label">Debug</span>
+      <button id="dbg-tile-grid" class="debug-toggle" title="Tile grid overlay [1]">Grid</button>
+      <button id="dbg-sprite-boxes" class="debug-toggle" title="Sprite bounding boxes [2]">Boxes</button>
+      <button id="dbg-palette-regions" class="debug-toggle" title="Palette region overlay [3]">Palette</button>
+      <button id="dbg-scroll-split" class="debug-toggle" title="Scroll split line [4]">Split</button>
+      <button id="dbg-nt-seam" class="debug-toggle" title="Nametable seam lines [5]">Seam</button>
+    </div>
   </div>
 
   <div class="render-area">
@@ -36,7 +44,7 @@
     <canvas id="compare-canvas" class="canvas-mode" width="256" height="240"></canvas>
   </div>
 
-  <div class="status-bar" id="status-bar">Drop a .nes ROM or click Load ROM</div>
+  <div class="status-bar" id="status-bar">Drop a .nes ROM or click Load ROM · Keys: arrows, Z=A, X=B, Enter=Start, RShift=Select</div>
 
   <script type="module" src="./src/app.js"></script>
 </body>

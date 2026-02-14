@@ -21,52 +21,95 @@ h1 {
   color: #7fdbca;
 }
 
-/* Controls */
-.controls {
+/* Toolbar */
+.toolbar {
   display: flex;
-  gap: 10px;
+  gap: 2px;
   margin-bottom: 12px;
-  align-items: center;
+  align-items: stretch;
   flex-wrap: wrap;
   justify-content: center;
+  background: #16162a;
+  border: 1px solid #2a2a4a;
+  border-radius: 4px;
+  padding: 4px;
 }
 
-.controls button {
+.toolbar-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 0 6px;
+}
+
+.toolbar-group + .toolbar-group {
+  border-left: 1px solid #2a2a4a;
+}
+
+.toolbar button,
+.toolbar .rom-label {
   background: #2a2a4a;
-  color: #e0e0e0;
-  border: 1px solid #4a4a6a;
-  padding: 6px 14px;
+  color: #c0c0d0;
+  border: 1px solid transparent;
+  padding: 5px 10px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
+  border-radius: 3px;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
 }
 
-.controls button:hover {
+.toolbar button:hover,
+.toolbar .rom-label:hover {
   background: #3a3a5a;
+  border-color: #5a5a7a;
 }
 
-.controls button:disabled {
-  opacity: 0.4;
+.toolbar button:disabled {
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
-.controls label {
-  cursor: pointer;
+.toolbar button:disabled:hover {
   background: #2a2a4a;
-  border: 1px solid #4a4a6a;
-  padding: 6px 14px;
-  font-size: 0.85rem;
+  border-color: transparent;
 }
 
-.controls label:hover {
+.group-label {
+  font-size: 0.65rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+  user-select: none;
+}
+
+/* Layer toggles */
+.layer-toggle.active {
+  background: #2a4a3a;
+  border-color: #4a8a5a;
+  color: #7fdbca;
+}
+
+.layer-toggle:not(.active) {
+  color: #666;
+  text-decoration: line-through;
+}
+
+/* Debug toggles */
+.debug-toggle.active {
   background: #3a3a5a;
+  border-color: #7a7aaa;
+  color: #bbaafe;
 }
 
 #fps-counter {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: #7fdbca;
-  min-width: 80px;
+  min-width: 56px;
   text-align: right;
+  padding: 0 2px;
 }
 
 /* Render area — reserves space for the 3x scaled viewport */
@@ -278,41 +321,7 @@ h1 {
   border-top: 1px dashed rgba(0, 255, 255, 0.8);
 }
 
-/* Debug toggle buttons */
-.debug-controls {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.debug-controls span {
-  font-size: 0.75rem;
-  color: #888;
-  margin-right: 4px;
-}
-
-.debug-controls button {
-  background: #2a2a4a;
-  color: #e0e0e0;
-  border: 1px solid #4a4a6a;
-  padding: 4px 10px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.75rem;
-}
-
-.debug-controls button:hover {
-  background: #3a3a5a;
-}
-
-.debug-controls button.active {
-  background: #3a5a3a;
-  border-color: #5a8a5a;
-  color: #7fdbca;
-}
+/* (debug-controls moved into unified toolbar) */
 
 /* --- Annotation Popover --- */
 

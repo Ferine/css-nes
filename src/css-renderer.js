@@ -28,6 +28,9 @@ export class CSSRenderer {
     this.debugOverlay = new DebugOverlay(this.viewport);
     this.annotationPopover = null; // initialized by app.js with PPU state getter
 
+    // UI-level layer visibility overrides (independent of PPU flags)
+    this.layerVisible = { bg: true, sprites: true };
+
     this.frameCount = 0;
   }
 
@@ -54,11 +57,13 @@ export class CSSRenderer {
       ppuState.chrBankSignature
     );
 
-    // 3. Update BG layer
-    this.bgLayer.update(ppuState, this.tileCache);
+    // 3. Update BG layer (respect UI override)
+    const bgState = this.layerVisible.bg ? ppuState : { ...ppuState, bgVisible: false };
+    this.bgLayer.update(bgState, this.tileCache);
 
-    // 4. Update sprite layer
-    this.spriteLayer.update(ppuState, this.tileCache);
+    // 4. Update sprite layer (respect UI override)
+    const sprState = this.layerVisible.sprites ? ppuState : { ...ppuState, spritesVisible: false };
+    this.spriteLayer.update(sprState, this.tileCache);
 
     // 5. Viewport background color
     this.viewport.style.backgroundColor = this.paletteManager.getBackgroundColor();
@@ -78,6 +83,14 @@ export class CSSRenderer {
     this.debugOverlay.update(ppuState);
 
     this.frameCount++;
+  }
+
+  /**
+   * Apply layer visibility immediately (for toggling while paused).
+   */
+  applyLayerVisibility() {
+    this.bgLayer.bgLayer.style.display = this.layerVisible.bg ? '' : 'none';
+    this.spriteLayer.spriteLayer.style.display = this.layerVisible.sprites ? '' : 'none';
   }
 
   /**

@@ -158,6 +158,9 @@ function updateButtonStates() {
   btnToggleCanvas.disabled = !running;
   btnPause.textContent = paused ? 'Resume' : 'Pause';
   btnToggleCanvas.textContent = canvasMode ? 'CSS Mode' : 'Canvas Mode';
+  // Sync layer toggle button states
+  document.getElementById('layer-bg').classList.toggle('active', renderer.layerVisible.bg);
+  document.getElementById('layer-sprites').classList.toggle('active', renderer.layerVisible.sprites);
 }
 
 btnPause.addEventListener('click', () => {
@@ -230,6 +233,22 @@ function getButton(e) {
   return null;
 }
 
+// --- Layer Toggle Buttons ---
+const layerBgBtn = document.getElementById('layer-bg');
+const layerSpritesBtn = document.getElementById('layer-sprites');
+
+layerBgBtn.addEventListener('click', () => {
+  renderer.layerVisible.bg = !renderer.layerVisible.bg;
+  layerBgBtn.classList.toggle('active', renderer.layerVisible.bg);
+  renderer.applyLayerVisibility();
+});
+
+layerSpritesBtn.addEventListener('click', () => {
+  renderer.layerVisible.sprites = !renderer.layerVisible.sprites;
+  layerSpritesBtn.classList.toggle('active', renderer.layerVisible.sprites);
+  renderer.applyLayerVisibility();
+});
+
 // --- Debug Toggle Buttons ---
 const debugButtons = {
   tileGrid: document.getElementById('dbg-tile-grid'),
@@ -251,6 +270,38 @@ wireDebugButton('spriteBoxes', debugButtons.spriteBoxes);
 wireDebugButton('paletteRegions', debugButtons.paletteRegions);
 wireDebugButton('scrollSplit', debugButtons.scrollSplit);
 wireDebugButton('nametableSeam', debugButtons.nametableSeam);
+
+// --- Keyboard Shortcuts ---
+const debugShortcuts = {
+  '1': 'tileGrid',
+  '2': 'spriteBoxes',
+  '3': 'paletteRegions',
+  '4': 'scrollSplit',
+  '5': 'nametableSeam',
+};
+
+document.addEventListener('keydown', (e) => {
+  // Skip if an input is focused
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  // Layer toggles
+  if (e.key === 'b' || e.key === 'B') {
+    layerBgBtn.click();
+    return;
+  }
+  if (e.key === 's' || e.key === 'S') {
+    layerSpritesBtn.click();
+    return;
+  }
+
+  // Debug overlay shortcuts
+  const dbgName = debugShortcuts[e.key];
+  if (dbgName) {
+    const on = renderer.debugOverlay.toggle(dbgName);
+    debugButtons[dbgName].classList.toggle('active', on);
+    return;
+  }
+});
 
 // --- Debug API ---
 window.nesDebug = {
