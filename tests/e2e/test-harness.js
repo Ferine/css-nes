@@ -246,6 +246,8 @@ function createDiagnosticsSummary(startFrame, timingEnabled, sampleEvery, maxSam
     framesWithVisibleWrites: { '0x2000': 0, '0x2001': 0, '0x2005': 0, '0x2006': 0 },
     regionHistogram: { '1': 0, '2': 0, '3+': 0 },
     framesWithMultiRegion: 0,
+    canonicalRegionHistogram: { '1': 0, '2': 0, '3+': 0 },
+    framesWithCanonicalMultiRegion: 0,
     framesWithMixedBgPatternBase: 0,
     framesWithMixedSprPatternBase: 0,
     maxRegionCount: 0,
@@ -310,6 +312,17 @@ function recordDiagnosticsFrame(summary, frame, ppuState, timingTrace, previousC
   summary.maxRegionCount = Math.max(summary.maxRegionCount, regionCount);
   if (regionCount > 1) summary.framesWithMultiRegion++;
 
+  const canonicalRegionCount = Math.max(
+    1,
+    Number.isFinite(ppuState.renderPlan?.canonicalRegionCount)
+      ? ppuState.renderPlan.canonicalRegionCount
+      : regionCount
+  );
+  if (canonicalRegionCount === 1) summary.canonicalRegionHistogram['1']++;
+  else if (canonicalRegionCount === 2) summary.canonicalRegionHistogram['2']++;
+  else summary.canonicalRegionHistogram['3+']++;
+  if (canonicalRegionCount > 1) summary.framesWithCanonicalMultiRegion++;
+
   const uniqueBgBases = new Set(regions.map((region) => region.bgPatternBase));
   const uniqueSprBases = new Set(regions.map((region) => region.sprPatternBase));
   if (uniqueBgBases.size > 1) summary.framesWithMixedBgPatternBase++;
@@ -319,7 +332,7 @@ function recordDiagnosticsFrame(summary, frame, ppuState, timingTrace, previousC
   const switchedRegions = [];
   if (Array.isArray(previousCHRSignature) && previousCHRSignature.length === 8 && currCHRSignature.length === 8) {
     for (let i = 0; i < 8; i++) {
-      if (currCHRSignature[i] !== previousCHRSignature[i]) switchedRegions.push(i);
+      if (!sameChrRegionSignature(currCHRSignature[i], previousCHRSignature[i])) switchedRegions.push(i);
     }
   }
 
@@ -347,6 +360,7 @@ function recordDiagnosticsFrame(summary, frame, ppuState, timingTrace, previousC
     summary.samples.push({
       frame,
       regions: regionCount,
+      canonicalRegions: canonicalRegionCount,
       splitCount: Math.max(0, regionCount - 1),
       traceEvents: traceCount,
       visibleTraceEvents: visibleCount,
@@ -363,7 +377,7 @@ function recordDiagnosticsFrame(summary, frame, ppuState, timingTrace, previousC
     });
   }
 
-  return currCHRSignature.length === 8 ? currCHRSignature.slice() : previousCHRSignature;
+  return currCHRSignature.length === 8 ? cloneChrSignature(currCHRSignature) : previousCHRSignature;
 }
 
 function finalizeDiagnosticsSummary(summary, endFrame) {
@@ -377,4 +391,28 @@ function finalizeDiagnosticsSummary(summary, endFrame) {
     avgVisibleMapperWritesPerFrame: summary.totalVisibleMapperWrites / frameDenom,
     avgSheetRegensPerFrame: summary.totalSheetRegens / frameDenom,
   };
+}
+
+function sameChrRegionSignature(a, b) {
+  if (!Array.isArray(a)) a = [a ?? null, null, null, null];
+  if (!Array.isArray(b)) b = [b ?? null, null, null, null];
+  return (
+    a[0] === b[0] &&
+    a[1] === b[1] &&
+    a[2] === b[2] &&
+    a[3] === b[3]
+  );
+}
+
+function cloneChrSignature(signature) {
+  const out = new Array(8);
+  for (let i = 0; i < 8; i++) {
+    const region = signature[i];
+    if (!Array.isArray(region)) {
+      out[i] = [region ?? null, null, null, null];
+    } else {
+      out[i] = [region[0] ?? null, region[1] ?? null, region[2] ?? null, region[3] ?? null];
+    }
+  }
+  return out;
 }

@@ -18,6 +18,7 @@ export class BGLayer {
     this.quadTileDivs = [];   // [q][slot] → div
     this.prevTile = [];        // [q][slot] → tile index
     this.prevAttrib = [];      // [q][slot] → palette attrib
+    this._activeBgSetClass = '';
 
     for (let q = 0; q < 4; q++) {
       const qDiv = document.createElement('div');
@@ -59,6 +60,15 @@ export class BGLayer {
     this.bgLayer.style.display = bgVisible ? '' : 'none';
     if (!bgVisible) return;
 
+    const bgSetClass = typeof tileCache.activateBgSet === 'function'
+      ? tileCache.activateBgSet(
+        ppuState.bgPatternBase,
+        ppuState.chrBankSignature,
+        ppuState.chrSetKey
+      )
+      : '';
+    this._applyBgSetClass(bgSetClass);
+
     // Update tile data for each quadrant
     for (let q = 0; q < 4; q++) {
       const physNT = mirrorMap[q];
@@ -93,6 +103,17 @@ export class BGLayer {
     }
 
     this.bgLayer.style.transform = `translate(${-scrollX}px, ${-scrollY}px)`;
+  }
+
+  _applyBgSetClass(bgSetClass) {
+    if (this._activeBgSetClass && this._activeBgSetClass !== bgSetClass) {
+      this.bgLayer.classList.remove(this._activeBgSetClass);
+    }
+    if (bgSetClass && this._activeBgSetClass !== bgSetClass) {
+      this.bgLayer.classList.add(bgSetClass);
+    }
+    this._activeBgSetClass = bgSetClass || '';
+    this.bgLayer.dataset.bgSet = this._activeBgSetClass;
   }
 
   _updateQuadrant(q, ntData, tileCache) {

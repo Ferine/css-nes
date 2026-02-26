@@ -4,6 +4,7 @@
 export function planScrollRegions(scanlineModel, fallbackState, options = {}) {
   const maxRegions = Math.max(1, options.maxRegions ?? 2);
   const minRegionHeight = Math.max(1, options.minRegionHeight ?? 6);
+  const compress = options.compress !== false;
   const scanlines = scanlineModel?.scanlines;
   if (!Array.isArray(scanlines) || scanlines.length === 0) {
     return [_singleRegionFromFallback(fallbackState)];
@@ -28,8 +29,10 @@ export function planScrollRegions(scanlineModel, fallbackState, options = {}) {
     return [_singleRegionFromFallback(fallbackState)];
   }
 
-  _coalesceTinyRegions(regions, minRegionHeight);
-  _limitRegions(regions, maxRegions);
+  if (compress) {
+    _coalesceTinyRegions(regions, minRegionHeight);
+    _limitRegions(regions, maxRegions);
+  }
   _normalizeBounds(regions);
 
   return regions;
@@ -56,6 +59,8 @@ function _toRegion(yStart, yEnd, state) {
     bgPatternBase: state.bgPatternBase,
     sprPatternBase: state.sprPatternBase,
     spriteSize: state.spriteSize,
+    mirrorMap: _normalizeMirrorMap(state.mirrorMap),
+    chrSignature: _normalizeCHRSignature(state.chrSignature),
   };
 }
 
@@ -80,6 +85,8 @@ function _singleRegionFromFallback(state) {
     bgPatternBase: state?.bgPatternBase ?? 0,
     sprPatternBase: state?.sprPatternBase ?? 0,
     spriteSize: state?.spriteSize ?? 0,
+    mirrorMap: _normalizeMirrorMap(state?.mirrorMap),
+    chrSignature: _normalizeCHRSignature(state?.chrSignature || state?.chrBankSignature),
   };
 }
 
@@ -96,7 +103,9 @@ function _sameRegionState(a, b) {
     a.spritesVisible === b.spritesVisible &&
     a.bgPatternBase === b.bgPatternBase &&
     a.sprPatternBase === b.sprPatternBase &&
-    a.spriteSize === b.spriteSize
+    a.spriteSize === b.spriteSize &&
+    _sameFour(a.mirrorMap, b.mirrorMap) &&
+    _sameEight(a.chrSignature, b.chrSignature)
   );
 }
 
@@ -188,7 +197,9 @@ function _mergeCost(a, b) {
     (a.spritesVisible !== b.spritesVisible ? 512 : 0) +
     (a.bgPatternBase !== b.bgPatternBase ? 256 : 0) +
     (a.sprPatternBase !== b.sprPatternBase ? 256 : 0) +
-    (a.spriteSize !== b.spriteSize ? 128 : 0);
+    (a.spriteSize !== b.spriteSize ? 128 : 0) +
+    (_sameFour(a.mirrorMap, b.mirrorMap) ? 0 : 1024) +
+    _chrMergePenalty(a.chrSignature, b.chrSignature);
   return scrollDelta + flagPenalty;
 }
 
@@ -199,4 +210,64 @@ function _normalizeBounds(regions) {
     regions[i].yStart = regions[i - 1].yEnd;
   }
   regions[regions.length - 1].yEnd = 240;
+}
+
+function _normalizeMirrorMap(mirrorMap) {
+  const out = [0, 1, 2, 3];
+  if (!Array.isArray(mirrorMap)) return out;
+  for (let i = 0; i < 4; i++) out[i] = mirrorMap[i] ?? out[i];
+  return out;
+}
+
+function _normalizeCHRSignature(signature) {
+  const out = new Array(8);
+  if (!Array.isArray(signature)) {
+    for (let i = 0; i < 8; i++) out[i] = [null, null, null, null];
+    return out;
+  }
+  for (let i = 0; i < 8; i++) {
+    const region = signature[i];
+    if (!Array.isArray(region)) {
+      out[i] = [region ?? null, null, null, null];
+      continue;
+    }
+    out[i] = [
+      region[0] ?? null,
+      region[1] ?? null,
+      region[2] ?? null,
+      region[3] ?? null,
+    ];
+  }
+  return out;
+}
+
+function _sameFour(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return !a && !b;
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+}
+
+function _sameEight(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return !a && !b;
+  for (let i = 0; i < 8; i++) {
+    if (!_sameChrRegion(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function _chrMergePenalty(a, b) {
+  let delta = 0;
+  for (let i = 0; i < 8; i++) {
+    if (!_sameChrRegion(a[i], b[i])) delta += 256;
+  }
+  return delta;
+}
+
+function _sameChrRegion(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  return (
+    a[0] === b[0] &&
+    a[1] === b[1] &&
+    a[2] === b[2] &&
+    a[3] === b[3]
+  );
 }

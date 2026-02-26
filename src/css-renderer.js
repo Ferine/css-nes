@@ -76,7 +76,8 @@ export class CSSRenderer {
       this.paletteManager,
       ppuState.bgPatternBase,
       ppuState.sprPatternBase,
-      ppuState.chrBankSignature
+      ppuState.chrBankSignature,
+      ppuState.chrStateCatalog
     );
 
     const renderRegions = Array.isArray(ppuState.renderPlan?.regions)

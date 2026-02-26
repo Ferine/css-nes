@@ -30,6 +30,7 @@ function createNESInstance() {
   });
   instanceExtractor = new PPUStateExtractor(instanceNes);
   instanceTracer = new PPUWriteTracer(instanceNes);
+  instanceTracer.setTrackMapperWrites(true);
   return { nes: instanceNes, extractor: instanceExtractor, tracer: instanceTracer };
 }
 

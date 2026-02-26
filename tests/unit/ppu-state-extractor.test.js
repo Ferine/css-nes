@@ -160,14 +160,14 @@ describe('PPUStateExtractor', () => {
     expect(state.nameTables[1].attrib[0]).toBe(3);
   });
 
-  it('extracts chrBankSignature as 8 Tile refs from 1KB regions', () => {
+  it('extracts chrBankSignature as numeric 1KB region signatures', () => {
     const nes = createMockNES();
     const state = new PPUStateExtractor(nes).extract();
 
     expect(state.chrBankSignature).toHaveLength(8);
-    // Each entry is the first Tile of its 1KB region
+    // Signature values are numeric and stable until tile refs change.
     for (let i = 0; i < 8; i++) {
-      expect(state.chrBankSignature[i]).toBe(nes.ppu.ptTile[i * 64]);
+      expect(typeof state.chrBankSignature[i]).toBe('number');
     }
   });
 
@@ -183,7 +183,6 @@ describe('PPUStateExtractor', () => {
     nes.ppu.ptTile[0] = newTile;
 
     const state2 = extractor.extract();
-    expect(state2.chrBankSignature[0]).toBe(newTile);
     expect(state2.chrBankSignature[0]).not.toBe(origRef);
   });
 
@@ -207,6 +206,8 @@ describe('PPUStateExtractor', () => {
     expect(state.renderPlan.regions[0].yStart).toBe(0);
     expect(state.renderPlan.regions[0].yEnd).toBe(240);
     expect(state.renderPlan.eventCount).toBe(0);
+    expect(state.renderPlan.canonicalRegionCount).toBe(1);
+    expect(state.renderPlan.canonicalSplitCount).toBe(0);
   });
 
   it('builds multi-region renderPlan from timingTrace events', () => {
@@ -238,5 +239,7 @@ describe('PPUStateExtractor', () => {
     expect(state.renderPlan.regions[0].yEnd).toBe(32);
     expect(state.renderPlan.regions[1].yStart).toBe(32);
     expect(state.renderPlan.eventCount).toBe(1);
+    expect(state.renderPlan.canonicalRegionCount).toBeGreaterThanOrEqual(2);
+    expect(state.renderPlan.scanlineModel.domainCounts.ppu).toBe(1);
   });
 });

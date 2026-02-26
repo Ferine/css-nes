@@ -136,6 +136,8 @@ test('SMB3 map diagnostics', async ({ page }) => {
 
   fs.writeFileSync(DIAG_JSON, JSON.stringify(payload, null, 2));
 
-  // Keep this as a diagnostics run, not a strict rendering assertion.
+  const mapBaseline = payload.checkpoints.find((c) => c.label === 'map-run-1');
+  expect(mapBaseline?.diffPercent ?? 100).toBeLessThanOrEqual(5);
+
   expect(payload.segments.length).toBeGreaterThan(0);
 });

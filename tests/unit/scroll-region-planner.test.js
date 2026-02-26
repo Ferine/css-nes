@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { planScrollRegions } from '../../src/scroll-region-planner.js';
 
-function makeState(scrollX, scrollY) {
+function makeState(scrollX, scrollY, signature = null) {
   return {
     scroll: {
       coarseX: Math.floor(scrollX / 8),
@@ -16,6 +16,8 @@ function makeState(scrollX, scrollY) {
     bgPatternBase: 0,
     sprPatternBase: 0,
     spriteSize: 0,
+    mirrorMap: [0, 1, 2, 3],
+    chrSignature: signature || [null, null, null, null, null, null, null, null],
   };
 }
 
@@ -80,5 +82,28 @@ describe('scroll-region-planner', () => {
     expect(regions.length).toBeLessThanOrEqual(2);
     expect(regions[0].yStart).toBe(0);
     expect(regions.at(-1).yEnd).toBe(240);
+  });
+
+  it('splits regions when CHR signature changes', () => {
+    const sigA = [{}, {}, {}, {}, {}, {}, {}, {}];
+    const sigB = [...sigA];
+    sigB[4] = {};
+
+    const scanlines = new Array(240);
+    for (let y = 0; y < 240; y++) {
+      scanlines[y] = y < 120 ? makeState(0, 0, sigA) : makeState(0, 0, sigB);
+    }
+
+    const regions = planScrollRegions({ scanlines }, null, {
+      compress: false,
+      minRegionHeight: 1,
+      maxRegions: 240,
+    });
+
+    expect(regions).toHaveLength(2);
+    expect(regions[0].yStart).toBe(0);
+    expect(regions[0].yEnd).toBe(120);
+    expect(regions[1].yStart).toBe(120);
+    expect(regions[1].yEnd).toBe(240);
   });
 });

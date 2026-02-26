@@ -66,6 +66,9 @@ export class BGRegionLayer {
       bgPatternBase: region.bgPatternBase ?? ppuState.bgPatternBase,
       sprPatternBase: region.sprPatternBase ?? ppuState.sprPatternBase,
       spriteSize: region.spriteSize ?? ppuState.spriteSize,
+      mirrorMap: region.mirrorMap ?? ppuState.mirrorMap,
+      chrBankSignature: region.chrSignature ?? ppuState.chrBankSignature,
+      chrSetKey: region.chrSetKey ?? ppuState.chrSetKey,
     };
   }
 

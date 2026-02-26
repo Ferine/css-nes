@@ -17,6 +17,8 @@ function createMockNES() {
     firstWrite: true,
     scanline: 30,
     curX: 120,
+    ntable1: [0, 1, 0, 1],
+    ptTile: Array.from({ length: 512 }, () => ({ pix: new Uint8Array(64) })),
   };
 
   const mapper = {
@@ -109,5 +111,25 @@ describe('PPUWriteTracer', () => {
     trace = tracer.consumeFrameTrace();
     expect(trace.events).toHaveLength(1);
     expect(trace.events[0].address).toBe(0x8000);
+  });
+
+  it('emits frame chrStates catalog snapshots', () => {
+    const nes = createMockNES();
+    const tracer = new PPUWriteTracer(nes);
+    tracer.install();
+    tracer.setTrackMapperWrites(true);
+
+    tracer.beginFrame();
+    nes.mmap.write(0x8000, 0x81);
+    const trace = tracer.consumeFrameTrace();
+
+    expect(Array.isArray(trace.chrStates)).toBe(true);
+    expect(trace.chrStates.length).toBeGreaterThan(0);
+    const first = trace.chrStates[0];
+    expect(first.bgBase === 0 || first.bgBase === 256).toBe(true);
+    expect(Array.isArray(first.signature)).toBe(true);
+    expect(first.signature).toHaveLength(4);
+    expect(Array.isArray(first.tiles)).toBe(true);
+    expect(first.tiles).toHaveLength(256);
   });
 });

@@ -16,6 +16,8 @@ function fallback() {
     bgPatternBase: 0,
     sprPatternBase: 0,
     spriteSize: 0,
+    mirrorMap: [0, 1, 2, 3],
+    chrSignature: [null, null, null, null, null, null, null, null],
   };
 }
 
@@ -81,5 +83,40 @@ describe('scanline-state-builder', () => {
     expect(model.scanlines[0].scroll.coarseX).toBe(3);
     expect(model.scanlines[0].bgPatternBase).toBe(256);
     expect(model.scanlines[0].spriteSize).toBe(1);
+  });
+
+  it('applies mapper writes within the same scanline by default', () => {
+    const chrA = [{}, {}, {}, {}, {}, {}, {}, {}];
+    const chrB = [...chrA];
+    chrB[3] = {};
+
+    const timingTrace = {
+      startState: {
+        regHT: 0, regVT: 0, regFH: 0, regFV: 0, regH: 0, regV: 0,
+        f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+        mirrorMap: [0, 1, 2, 3],
+        chrSignature: chrA,
+      },
+      events: [
+        {
+          seq: 0,
+          address: 0x8000,
+          phase: 'visible',
+          screenY: 40,
+          after: {
+            regHT: 0, regVT: 0, regFH: 0, regFV: 0, regH: 0, regV: 0,
+            f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+            mirrorMap: [0, 1, 2, 3],
+            chrSignature: chrB,
+          },
+        },
+      ],
+    };
+
+    const model = buildScanlineState(timingTrace, fallback());
+    expect(model.scanlines[39].chrSignature[3][0]).toBe(chrA[3]);
+    expect(model.scanlines[40].chrSignature[3][0]).toBe(chrB[3]);
+    expect(model.canonicalSegments).toHaveLength(2);
+    expect(model.canonicalSegments[1].source).toBe('mapper');
   });
 });

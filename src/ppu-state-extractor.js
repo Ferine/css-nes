@@ -8,10 +8,14 @@ import { planScrollRegions } from './scroll-region-planner.js';
 export class PPUStateExtractor {
   constructor(nes) {
     this.nes = nes;
+    this._tileRefIds = new WeakMap();
+    this._nextTileRefId = 1;
   }
 
   extract(options = {}) {
     const ppu = this.nes.ppu;
+    const mirrorMap = [ppu.ntable1[0], ppu.ntable1[1], ppu.ntable1[2], ppu.ntable1[3]];
+    const chrBankSignature = this._extractCHRBankSignature(ppu);
     const scroll = {
       coarseX: ppu.regHT,
       coarseY: ppu.regVT,
@@ -33,7 +37,10 @@ export class PPUStateExtractor {
       bgPatternBase,
       sprPatternBase,
       spriteSize,
+      mirrorMap,
+      chrSignature: chrBankSignature,
     });
+    const chrStateCatalog = this._extractCHRStateCatalog(options.timingTrace?.chrStates);
 
     return {
       // Palettes — 16 entries each, packed 0xRRGGBB
@@ -44,7 +51,7 @@ export class PPUStateExtractor {
       nameTables: this._extractNameTables(ppu),
 
       // Mirroring map — logical quadrant → physical nametable index
-      mirrorMap: [ppu.ntable1[0], ppu.ntable1[1], ppu.ntable1[2], ppu.ntable1[3]],
+      mirrorMap,
 
       // Pattern table tile data (reference, not copy — tiles are Tile objects with .pix arrays)
       ptTile: ppu.ptTile,
@@ -68,10 +75,13 @@ export class PPUStateExtractor {
       // Regionized render plan (single region fallback when no timing data)
       renderPlan,
 
-      // CHR bank signature — one Tile object reference per 1KB CHR region.
-      // When load1kVromBank replaces Tile objects, the refs change, enabling
-      // fast O(8) bank-switch detection instead of hashing all tile pixel data.
-      chrBankSignature: this._extractCHRBankSignature(ppu),
+      // Catalog of captured BG CHR states keyed by signature/base.
+      chrStateCatalog,
+
+      // CHR bank signature — sampled Tile object refs per 1KB CHR region.
+      // Each region entry stores multiple refs to reduce aliasing between banks
+      // that share a single leading tile.
+      chrBankSignature,
 
       // Framebuffer reference for canvas comparison
       buffer: ppu.buffer,
@@ -80,11 +90,28 @@ export class PPUStateExtractor {
 
   _buildRenderPlan(timingTrace, fallbackState) {
     const events = Array.isArray(timingTrace?.events) ? timingTrace.events : [];
-    const scanlineModel = buildScanlineState(timingTrace, fallbackState);
-    const regions = planScrollRegions(scanlineModel, fallbackState, {
+    const chrStates = this._extractCHRStateCatalog(timingTrace?.chrStates);
+    const scanlineModel = buildScanlineState(timingTrace, fallbackState, {
+      includeMapperWrites: true,
+      mapperApplyWithinScanline: true,
+    });
+    const canonicalRegionsRaw = planScrollRegions(scanlineModel, fallbackState, {
+      compress: false,
+      minRegionHeight: 1,
+      maxRegions: 240,
+    });
+    const regionsRaw = planScrollRegions(scanlineModel, fallbackState, {
       maxRegions: 2,
       minRegionHeight: 6,
     });
+    const canonicalRegions = canonicalRegionsRaw.map((region) => ({
+      ...region,
+      chrSetKey: this._buildChrSetKey(region.bgPatternBase, region.chrSignature),
+    }));
+    const regions = regionsRaw.map((region) => ({
+      ...region,
+      chrSetKey: this._buildChrSetKey(region.bgPatternBase, region.chrSignature),
+    }));
     const eventCount = events.length;
 
     return {
@@ -92,8 +119,52 @@ export class PPUStateExtractor {
       source: eventCount > 0 ? 'timing-trace' : 'snapshot',
       eventCount,
       splitCount: Math.max(0, regions.length - 1),
+      canonicalSplitCount: Math.max(0, canonicalRegions.length - 1),
+      canonicalRegionCount: canonicalRegions.length,
+      canonicalRegions,
+      scanlineModel,
+      chrStateKeys: chrStates.map((state) => state.key),
       regions,
     };
+  }
+
+  _buildChrSetKey(bgBase, chrSignature) {
+    const base = bgBase >= 256 ? 256 : 0;
+    const start = base >= 256 ? 4 : 0;
+    const sig = new Array(4);
+    for (let i = 0; i < 4; i++) {
+      const entry = chrSignature?.[start + i];
+      sig[i] = Array.isArray(entry) ? (entry[0] ?? 0) : (entry ?? 0);
+    }
+    return `${base}:${sig.join(',')}`;
+  }
+
+  _extractCHRStateCatalog(chrStates) {
+    if (!Array.isArray(chrStates)) return [];
+
+    const out = [];
+    for (const state of chrStates) {
+      const bgBase = state?.bgBase >= 256 ? 256 : 0;
+      const signature = Array.isArray(state?.signature)
+        ? [
+          state.signature[0] ?? 0,
+          state.signature[1] ?? 0,
+          state.signature[2] ?? 0,
+          state.signature[3] ?? 0,
+        ]
+        : [0, 0, 0, 0];
+      const key = state?.key || `${bgBase}:${signature.join(',')}`;
+      if (!Array.isArray(state?.tiles) || state.tiles.length < 256) continue;
+
+      out.push({
+        key,
+        bgBase,
+        signature,
+        tiles: state.tiles.slice(0, 256),
+      });
+    }
+
+    return out;
   }
 
   _extractNameTables(ppu) {
@@ -113,17 +184,32 @@ export class PPUStateExtractor {
   }
 
   /**
-   * Sample the first Tile object reference from each 1KB CHR region (64 tiles).
-   * 8 regions: ptTile[0..63], [64..127], [128..191], [192..255],
-   *            [256..319], [320..383], [384..447], [448..511]
-   * Regions 0-3 = pattern table $0000-$0FFF, regions 4-7 = $1000-$1FFF.
+   * Compute a stable numeric signature per 1KB CHR region using object-identity
+   * IDs for all 64 tiles in the region (FNV-1a style fold).
    */
   _extractCHRBankSignature(ppu) {
     const refs = new Array(8);
     for (let i = 0; i < 8; i++) {
-      refs[i] = ppu.ptTile[i * 64];
+      const base = i * 64;
+      let h = 0x811c9dc5;
+      for (let j = 0; j < 64; j++) {
+        const id = this._tileRefId(ppu.ptTile[base + j]);
+        h ^= id;
+        h = Math.imul(h, 0x01000193);
+      }
+      refs[i] = h >>> 0;
     }
     return refs;
+  }
+
+  _tileRefId(tile) {
+    if (!tile || (typeof tile !== 'object' && typeof tile !== 'function')) return 0;
+    let id = this._tileRefIds.get(tile);
+    if (!id) {
+      id = this._nextTileRefId++;
+      this._tileRefIds.set(tile, id);
+    }
+    return id;
   }
 
   _extractSprites(ppu) {

@@ -1,6 +1,6 @@
 /**
- * Captures frame-local PPU register writes with timing metadata.
- * We patch the active mapper's regWrite() at runtime to avoid modifying jsnes.
+ * Captures frame-local timed writes relevant to rendering state.
+ * We patch mapper regWrite()/write() at runtime to avoid modifying jsnes.
  */
 export class PPUWriteTracer {
   constructor(nes) {
@@ -10,11 +10,14 @@ export class PPUWriteTracer {
     this._originalRegWrite = null;
     this._originalWrite = null;
     this._trackMapperWrites = false;
+    this._tileRefIds = new WeakMap();
+    this._nextTileRefId = 1;
 
     this._frameOpen = false;
     this._seq = 0;
     this._startState = null;
     this._events = [];
+    this._chrStatesByKey = new Map();
   }
 
   install() {
@@ -53,6 +56,9 @@ export class PPUWriteTracer {
           firstWriteBefore: !!before.firstWrite,
           firstWriteAfter: !!after.firstWrite,
         });
+        if (address === 0x2000) {
+          tracer._captureCurrentCHRStates();
+        }
       }
 
       return ret;
@@ -83,6 +89,7 @@ export class PPUWriteTracer {
             firstWriteBefore: !!before.firstWrite,
             firstWriteAfter: !!after.firstWrite,
           });
+          tracer._captureCurrentCHRStates();
         }
 
         return ret;
@@ -108,7 +115,9 @@ export class PPUWriteTracer {
   beginFrame() {
     this._events.length = 0;
     this._seq = 0;
+    this._chrStatesByKey.clear();
     this._startState = this._snapshotPPU();
+    this._captureCurrentCHRStates();
     this._frameOpen = true;
   }
 
@@ -116,11 +125,13 @@ export class PPUWriteTracer {
     const trace = {
       startState: this._startState || this._snapshotPPU(),
       events: this._events.slice(),
+      chrStates: Array.from(this._chrStatesByKey.values()),
     };
 
     this._frameOpen = false;
     this._events.length = 0;
     this._startState = null;
+    this._chrStatesByKey.clear();
 
     return trace;
   }
@@ -159,6 +170,12 @@ export class PPUWriteTracer {
 
   _snapshotPPU() {
     const ppu = this.nes.ppu;
+    const mirrorMap = ppu.ntable1
+      ? [ppu.ntable1[0], ppu.ntable1[1], ppu.ntable1[2], ppu.ntable1[3]]
+      : [0, 1, 2, 3];
+
+    const chrSignature = this._computeCHRSignature(ppu.ptTile);
+
     return {
       regHT: ppu.regHT,
       regVT: ppu.regVT,
@@ -171,9 +188,62 @@ export class PPUWriteTracer {
       f_bgPatternTable: ppu.f_bgPatternTable,
       f_spPatternTable: ppu.f_spPatternTable,
       f_spriteSize: ppu.f_spriteSize,
+      mirrorMap,
+      chrSignature,
       firstWrite: ppu.firstWrite,
       scanline: ppu.scanline,
       dot: ppu.curX,
     };
+  }
+
+  _tileRefId(tile) {
+    if (!tile || (typeof tile !== 'object' && typeof tile !== 'function')) return 0;
+    let id = this._tileRefIds.get(tile);
+    if (!id) {
+      id = this._nextTileRefId++;
+      this._tileRefIds.set(tile, id);
+    }
+    return id;
+  }
+
+  _computeCHRSignature(tiles) {
+    const signature = new Array(8);
+    if (!Array.isArray(tiles)) {
+      for (let i = 0; i < 8; i++) signature[i] = 0;
+      return signature;
+    }
+
+    for (let i = 0; i < 8; i++) {
+      const base = i * 64;
+      let h = 0x811c9dc5;
+      for (let j = 0; j < 64; j++) {
+        const id = this._tileRefId(tiles[base + j]);
+        h ^= id;
+        h = Math.imul(h, 0x01000193);
+      }
+      signature[i] = h >>> 0;
+    }
+    return signature;
+  }
+
+  _captureCurrentCHRStates() {
+    const ppu = this.nes.ppu;
+    const tiles = ppu.ptTile;
+    if (!Array.isArray(tiles) || tiles.length < 512) return;
+
+    const signature = this._computeCHRSignature(tiles);
+    this._storeCHRState(0, signature.slice(0, 4), tiles.slice(0, 256));
+    this._storeCHRState(256, signature.slice(4, 8), tiles.slice(256, 512));
+  }
+
+  _storeCHRState(bgBase, signatureSlice, tileSlice) {
+    const key = `${bgBase}:${signatureSlice.join(',')}`;
+    if (this._chrStatesByKey.has(key)) return;
+    this._chrStatesByKey.set(key, {
+      key,
+      bgBase,
+      signature: signatureSlice.slice(),
+      tiles: tileSlice.slice(),
+    });
   }
 }
