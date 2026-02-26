@@ -12,18 +12,20 @@ let extractor;
 let renderer;
 let latestPPUState = null;
 
-function initNES() {
-  nes = new NES({
+function createNESInstance() {
+  let instanceExtractor;
+  const instanceNes = new NES({
     onFrame(buffer) {
       // Extract PPU state at end of frame
-      latestPPUState = extractor.extract();
+      latestPPUState = instanceExtractor.extract();
       latestPPUState.buffer = buffer;
     },
     onAudioSample() {
       // Audio discarded — this is a visual POC
     },
   });
-  extractor = new PPUStateExtractor(nes);
+  instanceExtractor = new PPUStateExtractor(instanceNes);
+  return { nes: instanceNes, extractor: instanceExtractor };
 }
 
 // --- Renderer Setup ---
@@ -67,6 +69,13 @@ let rafId = null;
 
 const fpsEl = document.getElementById('fps-counter');
 
+function cancelGameLoop() {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+}
+
 function updateStats(mutCount, domNodes, visSprites, sheetRegens) {
   if (mutCount === null) {
     // Canvas mode / inactive — dim everything
@@ -100,7 +109,10 @@ function updateStats(mutCount, domNodes, visSprites, sheetRegens) {
 }
 
 function gameLoop(timestamp) {
-  if (!running || paused) return;
+  if (!running || paused) {
+    rafId = null;
+    return;
+  }
 
   // Throttle to ~60fps
   const elapsed = timestamp - lastFrameTime;
@@ -143,8 +155,6 @@ function gameLoop(timestamp) {
 
 // --- ROM Loading ---
 function loadROM(data) {
-  initNES();
-
   // Convert ArrayBuffer to string (char per byte)
   const bytes = new Uint8Array(data);
   let str = '';
@@ -152,15 +162,23 @@ function loadROM(data) {
     str += String.fromCharCode(bytes[i]);
   }
 
+  const { nes: nextNes, extractor: nextExtractor } = createNESInstance();
+
   try {
-    nes.loadROM(str);
+    nextNes.loadROM(str);
   } catch (e) {
     document.getElementById('status-bar').textContent = `Error: ${e.message}`;
     return;
   }
 
+  cancelGameLoop();
+  nes = nextNes;
+  extractor = nextExtractor;
+  latestPPUState = null;
   running = true;
   paused = false;
+  renderer.viewport.classList.remove('paused');
+  renderer.annotationPopover?.dismiss();
   updateButtonStates();
   document.getElementById('status-bar').textContent = 'Running';
   lastFrameTime = performance.now();
@@ -219,10 +237,11 @@ btnPause.addEventListener('click', () => {
     renderer.annotationPopover?.dismiss();
     lastFrameTime = performance.now();
     document.getElementById('status-bar').textContent = 'Running';
+    cancelGameLoop();
     rafId = requestAnimationFrame(gameLoop);
   } else {
     document.getElementById('status-bar').textContent = 'Paused';
-    if (rafId) cancelAnimationFrame(rafId);
+    cancelGameLoop();
   }
 });
 
