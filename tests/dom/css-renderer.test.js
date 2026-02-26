@@ -165,4 +165,58 @@ describe('CSSRenderer (DOM)', () => {
     expect(renderer.viewport.dataset.bgRegions).toBe('2');
     expect(renderer.viewport.dataset.timingMode).toBe('region');
   });
+
+  it('uses region timing model to keep sprites visible when snapshot says hidden', () => {
+    const renderer = new CSSRenderer(wrapper);
+    const state = createMockPPUState({
+      spritesVisible: false,
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+      },
+    });
+
+    renderer.renderFrame(state);
+
+    expect(renderer.spriteLayer.spriteLayer.style.display).toBe('');
+  });
+
+  it('hides sprites when all render regions disable them', () => {
+    const renderer = new CSSRenderer(wrapper);
+    const state = createMockPPUState({
+      spritesVisible: true,
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: false,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+      },
+    });
+
+    renderer.renderFrame(state);
+
+    expect(renderer.spriteLayer.spriteLayer.style.display).toBe('none');
+  });
 });

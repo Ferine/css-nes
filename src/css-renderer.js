@@ -84,6 +84,7 @@ export class CSSRenderer {
       ? ppuState.renderPlan.regions
       : null;
     const hiddenBgState = { ...ppuState, bgVisible: false };
+    const effectiveSpritesVisible = this._resolveSpritesVisible(ppuState, renderRegions);
 
     // 3. Update BG layer(s) (respect UI override)
     if (!this.layerVisible.bg) {
@@ -101,7 +102,9 @@ export class CSSRenderer {
     }
 
     // 4. Update sprite layer (respect UI override)
-    const sprState = this.layerVisible.sprites ? ppuState : { ...ppuState, spritesVisible: false };
+    const sprState = this.layerVisible.sprites
+      ? { ...ppuState, spritesVisible: effectiveSpritesVisible }
+      : { ...ppuState, spritesVisible: false };
     this.spriteLayer.update(sprState, this.tileCache);
 
     // 5. Viewport background color
@@ -157,5 +160,12 @@ export class CSSRenderer {
    */
   setScale(n) {
     this.wrapper.style.transform = `scale(${n})`;
+  }
+
+  _resolveSpritesVisible(ppuState, renderRegions) {
+    if (Array.isArray(renderRegions) && renderRegions.length > 0) {
+      return renderRegions.some((region) => region?.spritesVisible !== false);
+    }
+    return !!ppuState.spritesVisible;
   }
 }
