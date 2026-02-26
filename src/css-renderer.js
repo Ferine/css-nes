@@ -5,6 +5,7 @@
 import { PaletteManager } from './palette-manager.js';
 import { TileCache } from './tile-cache.js';
 import { BGLayer } from './bg-layer.js';
+import { BGRegionLayer } from './bg-region-layer.js';
 import { SpriteLayer } from './sprite-layer.js';
 import { DebugOverlay } from './debug-overlay.js';
 import { AnnotationPopover } from './annotation-popover.js';
@@ -28,6 +29,7 @@ export class CSSRenderer {
     this.paletteManager = new PaletteManager();
     this.tileCache = new TileCache();
     this.bgLayer = new BGLayer(this.viewport);
+    this.bgRegionLayer = new BGRegionLayer(this.viewport);
     this.spriteLayer = new SpriteLayer(this.viewport);
     this.debugOverlay = new DebugOverlay(this.viewport);
     this.annotationPopover = null; // initialized by app.js with PPU state getter
@@ -38,6 +40,7 @@ export class CSSRenderer {
     // UI-level layer visibility overrides (independent of PPU flags)
     this.layerVisible = { bg: true, sprites: true };
 
+    this._usingRegionBg = false;
     this.frameCount = 0;
   }
 
@@ -76,9 +79,25 @@ export class CSSRenderer {
       ppuState.chrBankSignature
     );
 
-    // 3. Update BG layer (respect UI override)
-    const bgState = this.layerVisible.bg ? ppuState : { ...ppuState, bgVisible: false };
-    this.bgLayer.update(bgState, this.tileCache);
+    const renderRegions = Array.isArray(ppuState.renderPlan?.regions)
+      ? ppuState.renderPlan.regions
+      : null;
+    const hiddenBgState = { ...ppuState, bgVisible: false };
+
+    // 3. Update BG layer(s) (respect UI override)
+    if (!this.layerVisible.bg) {
+      this._usingRegionBg = false;
+      this.bgRegionLayer.hide();
+      this.bgLayer.update(hiddenBgState, this.tileCache);
+    } else if (renderRegions && renderRegions.length > 1) {
+      this._usingRegionBg = true;
+      this.bgLayer.update(hiddenBgState, this.tileCache);
+      this.bgRegionLayer.update(ppuState, this.tileCache, renderRegions);
+    } else {
+      this._usingRegionBg = false;
+      this.bgRegionLayer.hide();
+      this.bgLayer.update(ppuState, this.tileCache);
+    }
 
     // 4. Update sprite layer (respect UI override)
     const sprState = this.layerVisible.sprites ? ppuState : { ...ppuState, spritesVisible: false };
@@ -97,6 +116,9 @@ export class CSSRenderer {
     this.viewport.dataset.sprPatternTable = ppuState.sprPatternBase === 0 ? '$0000' : '$1000';
     this.viewport.dataset.spriteSize = ppuState.spriteSize === 0 ? '8x8' : '8x16';
     this.viewport.dataset.mirroring = ppuState.mirrorMap.join(',');
+    this.viewport.dataset.bgRegions = String(renderRegions ? renderRegions.length : 1);
+    this.viewport.dataset.timingMode = ppuState.renderPlan?.mode || 'single';
+    this.viewport.dataset.timingEvents = String(ppuState.renderPlan?.eventCount || 0);
 
     // 7. Update debug overlays
     this.debugOverlay.update(ppuState);
@@ -116,7 +138,16 @@ export class CSSRenderer {
    * Apply layer visibility immediately (for toggling while paused).
    */
   applyLayerVisibility() {
-    this.bgLayer.bgLayer.style.display = this.layerVisible.bg ? '' : 'none';
+    if (!this.layerVisible.bg) {
+      this.bgLayer.bgLayer.style.display = 'none';
+      this.bgRegionLayer.hide();
+    } else if (this._usingRegionBg) {
+      this.bgLayer.bgLayer.style.display = 'none';
+      this.bgRegionLayer.root.style.display = '';
+    } else {
+      this.bgLayer.bgLayer.style.display = '';
+      this.bgRegionLayer.hide();
+    }
     this.spriteLayer.spriteLayer.style.display = this.layerVisible.sprites ? '' : 'none';
   }
 

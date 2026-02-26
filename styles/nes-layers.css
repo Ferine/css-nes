@@ -143,6 +143,29 @@ h1 {
   will-change: transform;
 }
 
+.bg-region-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 256px;
+  height: 240px;
+}
+
+.bg-region-band {
+  position: absolute;
+  left: 0;
+  width: 256px;
+  overflow: hidden;
+}
+
+.bg-region-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 256px;
+  height: 240px;
+}
+
 /* Nametable container — CSS Grid 32 columns */
 .nametable {
   display: grid;

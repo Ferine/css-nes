@@ -3,21 +3,25 @@
  */
 import { NES } from 'jsnes';
 import { PPUStateExtractor } from './ppu-state-extractor.js';
+import { PPUWriteTracer } from './ppu-write-tracer.js';
 import { CSSRenderer } from './css-renderer.js';
 import { MutationCounter } from './mutation-counter.js';
 
 // --- NES Setup ---
 let nes;
 let extractor;
+let tracer;
 let renderer;
 let latestPPUState = null;
 
 function createNESInstance() {
   let instanceExtractor;
+  let instanceTracer;
   const instanceNes = new NES({
     onFrame(buffer) {
       // Extract PPU state at end of frame
-      latestPPUState = instanceExtractor.extract();
+      const timingTrace = instanceTracer ? instanceTracer.consumeFrameTrace() : null;
+      latestPPUState = instanceExtractor.extract({ timingTrace });
       latestPPUState.buffer = buffer;
     },
     onAudioSample() {
@@ -25,7 +29,8 @@ function createNESInstance() {
     },
   });
   instanceExtractor = new PPUStateExtractor(instanceNes);
-  return { nes: instanceNes, extractor: instanceExtractor };
+  instanceTracer = new PPUWriteTracer(instanceNes);
+  return { nes: instanceNes, extractor: instanceExtractor, tracer: instanceTracer };
 }
 
 // --- Renderer Setup ---
@@ -123,6 +128,7 @@ function gameLoop(timestamp) {
   lastFrameTime = timestamp;
 
   // Run NES frame — triggers onFrame callback
+  tracer?.beginFrame();
   nes.frame();
 
   // Render to active mode
@@ -162,10 +168,11 @@ function loadROM(data) {
     str += String.fromCharCode(bytes[i]);
   }
 
-  const { nes: nextNes, extractor: nextExtractor } = createNESInstance();
+  const { nes: nextNes, extractor: nextExtractor, tracer: nextTracer } = createNESInstance();
 
   try {
     nextNes.loadROM(str);
+    nextTracer.install();
   } catch (e) {
     document.getElementById('status-bar').textContent = `Error: ${e.message}`;
     return;
@@ -174,6 +181,7 @@ function loadROM(data) {
   cancelGameLoop();
   nes = nextNes;
   extractor = nextExtractor;
+  tracer = nextTracer;
   latestPPUState = null;
   running = true;
   paused = false;
@@ -247,6 +255,7 @@ btnPause.addEventListener('click', () => {
 
 btnStep.addEventListener('click', () => {
   if (!running || !paused) return;
+  tracer?.beginFrame();
   nes.frame();
   if (latestPPUState) {
     if (canvasMode) {

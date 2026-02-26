@@ -126,4 +126,43 @@ describe('CSSRenderer (DOM)', () => {
     renderer.setScale(3);
     expect(wrapper.style.transform).toBe('scale(3)');
   });
+
+  it('uses split BG region compositor when renderPlan has multiple regions', () => {
+    const renderer = new CSSRenderer(wrapper);
+    const state = createMockPPUState({
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 32,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+          {
+            yStart: 32,
+            yEnd: 240,
+            scroll: { coarseX: 4, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 1, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+      },
+    });
+
+    renderer.renderFrame(state);
+
+    expect(renderer.bgLayer.bgLayer.style.display).toBe('none');
+    expect(renderer.bgRegionLayer.root.style.display).toBe('');
+    expect(renderer.viewport.dataset.bgRegions).toBe('2');
+    expect(renderer.viewport.dataset.timingMode).toBe('region');
+  });
 });

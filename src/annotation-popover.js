@@ -200,7 +200,8 @@ export class AnnotationPopover {
     const spriteHits = this._sampleSpritePixels(ppuState, screenX, screenY);
     const final = this._resolveFinalPixel(ppuState, bg, spriteHits);
 
-    const { scrollX, scrollY } = this._scrollPixels(ppuState.scroll);
+    const activeScroll = this._scrollForScreenY(ppuState, screenY);
+    const { scrollX, scrollY } = this._scrollPixels(activeScroll);
     const bgStatus = ppuState.bgVisible
       ? `ci ${bg.colorIndex}, pal ${bg.palGroup}, ${bg.color}`
       : 'Layer disabled';
@@ -224,7 +225,8 @@ export class AnnotationPopover {
   }
 
   _sampleBgPixel(ppuState, screenX, screenY) {
-    const { scrollX, scrollY } = this._scrollPixels(ppuState.scroll);
+    const activeScroll = this._scrollForScreenY(ppuState, screenY);
+    const { scrollX, scrollY } = this._scrollPixels(activeScroll);
     const worldX = (scrollX + screenX) % 512;
     const worldY = (scrollY + screenY) % 480;
 
@@ -483,6 +485,18 @@ export class AnnotationPopover {
       scrollX: scroll.coarseX * 8 + scroll.fineX + scroll.nameTableH * 256,
       scrollY: scroll.coarseY * 8 + scroll.fineY + scroll.nameTableV * 240,
     };
+  }
+
+  _scrollForScreenY(ppuState, screenY) {
+    const regions = ppuState.renderPlan?.regions;
+    if (Array.isArray(regions)) {
+      for (const region of regions) {
+        if (screenY >= region.yStart && screenY < region.yEnd && region.scroll) {
+          return region.scroll;
+        }
+      }
+    }
+    return ppuState.scroll;
   }
 
   _decodePaletteGroup(rawValue) {

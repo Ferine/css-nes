@@ -197,4 +197,46 @@ describe('PPUStateExtractor', () => {
     expect(state.spr0HitY).toBe(42);
     expect(state.buffer).toBe(nes.ppu.buffer);
   });
+
+  it('includes a single-region renderPlan by default', () => {
+    const nes = createMockNES();
+    const state = new PPUStateExtractor(nes).extract();
+
+    expect(state.renderPlan.mode).toBe('single');
+    expect(state.renderPlan.regions).toHaveLength(1);
+    expect(state.renderPlan.regions[0].yStart).toBe(0);
+    expect(state.renderPlan.regions[0].yEnd).toBe(240);
+    expect(state.renderPlan.eventCount).toBe(0);
+  });
+
+  it('builds multi-region renderPlan from timingTrace events', () => {
+    const nes = createMockNES();
+    const extractor = new PPUStateExtractor(nes);
+    const state = extractor.extract({
+      timingTrace: {
+        startState: {
+          regHT: 0, regVT: 0, regFH: 0, regFV: 0, regH: 0, regV: 0,
+          f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+        },
+        events: [
+          {
+            seq: 0,
+            address: 0x2005,
+            phase: 'visible',
+            screenY: 31,
+            after: {
+              regHT: 10, regVT: 0, regFH: 2, regFV: 0, regH: 1, regV: 0,
+              f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(state.renderPlan.mode).toBe('region');
+    expect(state.renderPlan.regions).toHaveLength(2);
+    expect(state.renderPlan.regions[0].yEnd).toBe(32);
+    expect(state.renderPlan.regions[1].yStart).toBe(32);
+    expect(state.renderPlan.eventCount).toBe(1);
+  });
 });

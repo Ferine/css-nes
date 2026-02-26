@@ -2,13 +2,38 @@
  * Extracts a clean snapshot of PPU state from jsnes internals.
  * All reads are from public properties on nes.ppu — no jsnes modifications needed.
  */
+import { buildScanlineState } from './scanline-state-builder.js';
+import { planScrollRegions } from './scroll-region-planner.js';
+
 export class PPUStateExtractor {
   constructor(nes) {
     this.nes = nes;
   }
 
-  extract() {
+  extract(options = {}) {
     const ppu = this.nes.ppu;
+    const scroll = {
+      coarseX: ppu.regHT,
+      coarseY: ppu.regVT,
+      fineX: ppu.regFH,
+      fineY: ppu.regFV,
+      nameTableH: ppu.regH,
+      nameTableV: ppu.regV,
+    };
+    const bgPatternBase = ppu.f_bgPatternTable === 0 ? 0 : 256;
+    const sprPatternBase = ppu.f_spPatternTable === 0 ? 0 : 256;
+    const spriteSize = ppu.f_spriteSize; // 0=8x8, 1=8x16
+    const bgVisible = ppu.f_bgVisibility === 1;
+    const spritesVisible = ppu.f_spVisibility === 1;
+
+    const renderPlan = this._buildRenderPlan(options.timingTrace, {
+      scroll,
+      bgVisible,
+      spritesVisible,
+      bgPatternBase,
+      sprPatternBase,
+      spriteSize,
+    });
 
     return {
       // Palettes — 16 entries each, packed 0xRRGGBB
@@ -28,24 +53,20 @@ export class PPUStateExtractor {
       sprites: this._extractSprites(ppu),
 
       // Scroll state — use reg* variants (cnt* are mutated during rendering)
-      scroll: {
-        coarseX: ppu.regHT,
-        coarseY: ppu.regVT,
-        fineX: ppu.regFH,
-        fineY: ppu.regFV,
-        nameTableH: ppu.regH,
-        nameTableV: ppu.regV,
-      },
+      scroll,
 
       // Control flags
-      bgPatternBase: ppu.f_bgPatternTable === 0 ? 0 : 256,
-      sprPatternBase: ppu.f_spPatternTable === 0 ? 0 : 256,
-      spriteSize: ppu.f_spriteSize, // 0=8x8, 1=8x16
-      bgVisible: ppu.f_bgVisibility === 1,
-      spritesVisible: ppu.f_spVisibility === 1,
+      bgPatternBase,
+      sprPatternBase,
+      spriteSize,
+      bgVisible,
+      spritesVisible,
 
       // Sprite 0 hit (for future scroll split detection)
       spr0HitY: ppu.spr0HitY,
+
+      // Regionized render plan (single region fallback when no timing data)
+      renderPlan,
 
       // CHR bank signature — one Tile object reference per 1KB CHR region.
       // When load1kVromBank replaces Tile objects, the refs change, enabling
@@ -54,6 +75,24 @@ export class PPUStateExtractor {
 
       // Framebuffer reference for canvas comparison
       buffer: ppu.buffer,
+    };
+  }
+
+  _buildRenderPlan(timingTrace, fallbackState) {
+    const events = Array.isArray(timingTrace?.events) ? timingTrace.events : [];
+    const scanlineModel = buildScanlineState(timingTrace, fallbackState);
+    const regions = planScrollRegions(scanlineModel, fallbackState, {
+      maxRegions: 2,
+      minRegionHeight: 6,
+    });
+    const eventCount = events.length;
+
+    return {
+      mode: regions.length > 1 ? 'region' : 'single',
+      source: eventCount > 0 ? 'timing-trace' : 'snapshot',
+      eventCount,
+      splitCount: Math.max(0, regions.length - 1),
+      regions,
     };
   }
 

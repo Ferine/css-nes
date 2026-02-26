@@ -62,6 +62,8 @@ nes.frame() -> onFrame -> PPUStateExtractor.extract()
 
 **Scroll wrapping.** Nametable quadrants reposition dynamically to handle the 512x480 wraparound without duplicating DOM elements.
 
+**Scanline-region split model (experimental).** Timed writes to `PPUCTRL`/`PPUMASK`/`PPUSCROLL`/`PPUADDR` are traced during each frame and reduced into per-scanline state, then compressed into vertical render regions. If multiple regions are detected, BG rendering switches from a single transform to a region compositor so HUD/gameplay splits can diverge.
+
 **CHR bank-switch detection.** The TileCache detects mapper bank switches (MMC3, etc.) via O(8) object-identity comparison of CHR region references. When `load1kVromBank` replaces Tile objects, the reference changes are caught instantly. A FNV-1a checksum fallback handles CHR-RAM games that modify tile pixel data in place.
 
 ## Annotation Popover
@@ -183,7 +185,7 @@ For comparison: the NES PPU does all of this in hardware with a 5.37 MHz clock, 
 
 ## Known Limitations
 
-- **No mid-frame scroll splits** — uses end-of-frame scroll registers (status bars will scroll with playfield)
+- **Split timing is scanline-granular** — multi-split support is experimental and not cycle-accurate yet
 - **BG priority is z-index based** — no per-pixel transparency check for sprites behind BG
 - **No audio** — visual rendering only
 - **8x16 sprites** — basic support, may have edge cases with CHR bank selection
