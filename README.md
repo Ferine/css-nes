@@ -66,7 +66,7 @@ nes.frame() -> onFrame -> PPUStateExtractor.extract()
 
 ## Annotation Popover
 
-Pause the emulator and click any tile or sprite to inspect it. The popover shows:
+Pause the emulator and click any tile or sprite to inspect it. Shift+click any viewport pixel to open per-pixel provenance (BG source tile, overlapping sprites, winner, and final color). The popover shows:
 
 **BG Tiles:** nametable address, tile index, grid position, quadrant/physical NT mapping, pattern table base, raw nametable and attribute bytes, an 8x8 CHR pixel grid rendered with palette colors, and palette swatches.
 

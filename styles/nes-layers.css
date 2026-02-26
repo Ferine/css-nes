@@ -346,6 +346,11 @@ h1 {
   max-width: 140px;
 }
 
+.annotation-popover.annotation-popover-pixel {
+  white-space: normal;
+  max-width: 220px;
+}
+
 .annot-header {
   font-size: 6px;
   font-weight: bold;
