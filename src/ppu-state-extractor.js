@@ -16,6 +16,7 @@ export class PPUStateExtractor {
     const ppu = this.nes.ppu;
     const mirrorMap = [ppu.ntable1[0], ppu.ntable1[1], ppu.ntable1[2], ppu.ntable1[3]];
     const chrBankSignature = this._extractCHRBankSignature(ppu);
+    const includeCanonicalRegions = options.includeCanonicalRegions !== false;
     const scroll = {
       coarseX: ppu.regHT,
       coarseY: ppu.regVT,
@@ -29,6 +30,7 @@ export class PPUStateExtractor {
     const spriteSize = ppu.f_spriteSize; // 0=8x8, 1=8x16
     const bgVisible = ppu.f_bgVisibility === 1;
     const spritesVisible = ppu.f_spVisibility === 1;
+    const chrStateCatalog = this._extractCHRStateCatalog(options.timingTrace?.chrStates);
 
     const renderPlan = this._buildRenderPlan(options.timingTrace, {
       scroll,
@@ -39,8 +41,10 @@ export class PPUStateExtractor {
       spriteSize,
       mirrorMap,
       chrSignature: chrBankSignature,
+    }, {
+      includeCanonicalRegions,
+      chrStateCatalog,
     });
-    const chrStateCatalog = this._extractCHRStateCatalog(options.timingTrace?.chrStates);
 
     return {
       // Palettes — 16 entries each, packed 0xRRGGBB
@@ -88,22 +92,25 @@ export class PPUStateExtractor {
     };
   }
 
-  _buildRenderPlan(timingTrace, fallbackState) {
+  _buildRenderPlan(timingTrace, fallbackState, options = {}) {
+    const includeCanonicalRegions = options.includeCanonicalRegions !== false;
+    const chrStateCatalog = Array.isArray(options.chrStateCatalog) ? options.chrStateCatalog : [];
     const events = Array.isArray(timingTrace?.events) ? timingTrace.events : [];
-    const chrStates = this._extractCHRStateCatalog(timingTrace?.chrStates);
     const scanlineModel = buildScanlineState(timingTrace, fallbackState, {
       includeMapperWrites: true,
       mapperApplyWithinScanline: true,
-    });
-    const canonicalRegionsRaw = planScrollRegions(scanlineModel, fallbackState, {
-      compress: false,
-      minRegionHeight: 1,
-      maxRegions: 240,
     });
     const regionsRaw = planScrollRegions(scanlineModel, fallbackState, {
       maxRegions: 2,
       minRegionHeight: 6,
     });
+    const canonicalRegionsRaw = includeCanonicalRegions
+      ? planScrollRegions(scanlineModel, fallbackState, {
+        compress: false,
+        minRegionHeight: 1,
+        maxRegions: 240,
+      })
+      : regionsRaw;
     const canonicalRegions = canonicalRegionsRaw.map((region) => ({
       ...region,
       chrSetKey: this._buildChrSetKey(region.bgPatternBase, region.chrSignature),
@@ -123,7 +130,7 @@ export class PPUStateExtractor {
       canonicalRegionCount: canonicalRegions.length,
       canonicalRegions,
       scanlineModel,
-      chrStateKeys: chrStates.map((state) => state.key),
+      chrStateKeys: chrStateCatalog.map((state) => state.key),
       regions,
     };
   }

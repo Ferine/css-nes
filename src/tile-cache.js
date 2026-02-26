@@ -215,7 +215,9 @@ export class TileCache {
       if (!Array.isArray(state?.tiles) || state.tiles.length < 256) continue;
 
       const { set, isNew } = this._getOrCreateBgSet(bgBase, key, signature);
-      set.tileSlice = state.tiles.slice(0, 256);
+      if (isNew || !set.tileSlice) {
+        set.tileSlice = state.tiles.slice(0, 256);
+      }
       set.lastUsedFrame = this._frameSeq;
 
       if (isNew || this._setNeedsImages(set)) {

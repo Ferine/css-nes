@@ -21,7 +21,10 @@ function createNESInstance() {
     onFrame(buffer) {
       // Extract PPU state at end of frame
       const timingTrace = instanceTracer ? instanceTracer.consumeFrameTrace() : null;
-      latestPPUState = instanceExtractor.extract({ timingTrace });
+      latestPPUState = instanceExtractor.extract({
+        timingTrace,
+        includeCanonicalRegions: false,
+      });
       latestPPUState.buffer = buffer;
     },
     onAudioSample() {

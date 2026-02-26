@@ -111,6 +111,8 @@ describe('PPUWriteTracer', () => {
     trace = tracer.consumeFrameTrace();
     expect(trace.events).toHaveLength(1);
     expect(trace.events[0].address).toBe(0x8000);
+    expect(Array.isArray(trace.events[0].after.chrSignature)).toBe(true);
+    expect(trace.events[0].after.chrSignature).toHaveLength(8);
   });
 
   it('emits frame chrStates catalog snapshots', () => {

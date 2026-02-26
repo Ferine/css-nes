@@ -38,14 +38,14 @@ export class PPUWriteTracer {
       let timing = null;
 
       if (track) {
-        before = tracer._snapshotPPU();
+        before = tracer._snapshotPPU({ includeChrSignature: false });
         timing = tracer._snapshotTiming();
       }
 
       const ret = tracer._originalRegWrite.call(this, address, value);
 
       if (track) {
-        const after = tracer._snapshotPPU();
+        const after = tracer._snapshotPPU({ includeChrSignature: false });
         tracer._events.push({
           seq: tracer._seq++,
           address,
@@ -56,9 +56,6 @@ export class PPUWriteTracer {
           firstWriteBefore: !!before.firstWrite,
           firstWriteAfter: !!after.firstWrite,
         });
-        if (address === 0x2000) {
-          tracer._captureCurrentCHRStates();
-        }
       }
 
       return ret;
@@ -71,7 +68,7 @@ export class PPUWriteTracer {
         let timing = null;
 
         if (track) {
-          before = tracer._snapshotPPU();
+          before = tracer._snapshotPPU({ includeChrSignature: false });
           timing = tracer._snapshotTiming();
         }
 
@@ -89,7 +86,7 @@ export class PPUWriteTracer {
             firstWriteBefore: !!before.firstWrite,
             firstWriteAfter: !!after.firstWrite,
           });
-          tracer._captureCurrentCHRStates();
+          tracer._captureCurrentCHRStates(after.chrSignature);
         }
 
         return ret;
@@ -117,7 +114,7 @@ export class PPUWriteTracer {
     this._seq = 0;
     this._chrStatesByKey.clear();
     this._startState = this._snapshotPPU();
-    this._captureCurrentCHRStates();
+    this._captureCurrentCHRStates(this._startState?.chrSignature);
     this._frameOpen = true;
   }
 
@@ -168,13 +165,12 @@ export class PPUWriteTracer {
     };
   }
 
-  _snapshotPPU() {
+  _snapshotPPU(options = {}) {
+    const includeChrSignature = options.includeChrSignature !== false;
     const ppu = this.nes.ppu;
     const mirrorMap = ppu.ntable1
       ? [ppu.ntable1[0], ppu.ntable1[1], ppu.ntable1[2], ppu.ntable1[3]]
       : [0, 1, 2, 3];
-
-    const chrSignature = this._computeCHRSignature(ppu.ptTile);
 
     return {
       regHT: ppu.regHT,
@@ -189,7 +185,7 @@ export class PPUWriteTracer {
       f_spPatternTable: ppu.f_spPatternTable,
       f_spriteSize: ppu.f_spriteSize,
       mirrorMap,
-      chrSignature,
+      chrSignature: includeChrSignature ? this._computeCHRSignature(ppu.ptTile) : undefined,
       firstWrite: ppu.firstWrite,
       scanline: ppu.scanline,
       dot: ppu.curX,
@@ -226,24 +222,36 @@ export class PPUWriteTracer {
     return signature;
   }
 
-  _captureCurrentCHRStates() {
+  _captureCurrentCHRStates(signature = null) {
     const ppu = this.nes.ppu;
     const tiles = ppu.ptTile;
     if (!Array.isArray(tiles) || tiles.length < 512) return;
 
-    const signature = this._computeCHRSignature(tiles);
-    this._storeCHRState(0, signature.slice(0, 4), tiles.slice(0, 256));
-    this._storeCHRState(256, signature.slice(4, 8), tiles.slice(256, 512));
+    const sig = Array.isArray(signature) && signature.length === 8
+      ? signature
+      : this._computeCHRSignature(tiles);
+    this._storeCHRState(0, sig, 0, tiles, 0);
+    this._storeCHRState(256, sig, 4, tiles, 256);
   }
 
-  _storeCHRState(bgBase, signatureSlice, tileSlice) {
+  _storeCHRState(bgBase, fullSignature, sigOffset, tiles, tileOffset) {
+    const signatureSlice = [
+      fullSignature[sigOffset + 0] ?? 0,
+      fullSignature[sigOffset + 1] ?? 0,
+      fullSignature[sigOffset + 2] ?? 0,
+      fullSignature[sigOffset + 3] ?? 0,
+    ];
     const key = `${bgBase}:${signatureSlice.join(',')}`;
     if (this._chrStatesByKey.has(key)) return;
+    const tileSlice = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      tileSlice[i] = tiles[tileOffset + i];
+    }
     this._chrStatesByKey.set(key, {
       key,
       bgBase,
-      signature: signatureSlice.slice(),
-      tiles: tileSlice.slice(),
+      signature: signatureSlice,
+      tiles: tileSlice,
     });
   }
 }

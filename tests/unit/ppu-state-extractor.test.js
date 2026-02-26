@@ -242,4 +242,35 @@ describe('PPUStateExtractor', () => {
     expect(state.renderPlan.canonicalRegionCount).toBeGreaterThanOrEqual(2);
     expect(state.renderPlan.scanlineModel.domainCounts.ppu).toBe(1);
   });
+
+  it('can skip canonical expansion for runtime extracts', () => {
+    const nes = createMockNES();
+    const extractor = new PPUStateExtractor(nes);
+    const state = extractor.extract({
+      includeCanonicalRegions: false,
+      timingTrace: {
+        startState: {
+          regHT: 0, regVT: 0, regFH: 0, regFV: 0, regH: 0, regV: 0,
+          f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+        },
+        events: [
+          {
+            seq: 0,
+            address: 0x2005,
+            phase: 'visible',
+            screenY: 31,
+            after: {
+              regHT: 10, regVT: 0, regFH: 2, regFV: 0, regH: 1, regV: 0,
+              f_bgVisibility: 1, f_spVisibility: 1, f_bgPatternTable: 0, f_spPatternTable: 0, f_spriteSize: 0,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(state.renderPlan.regions).toHaveLength(2);
+    expect(state.renderPlan.canonicalRegions).toHaveLength(2);
+    expect(state.renderPlan.canonicalRegionCount).toBe(2);
+    expect(state.renderPlan.canonicalSplitCount).toBe(1);
+  });
 });
