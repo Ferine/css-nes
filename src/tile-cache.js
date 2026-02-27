@@ -36,6 +36,9 @@ export class TileCache {
     this.bgSets = new Map();
     this.maxBgSets = Math.max(1, options.maxBgSets ?? 12);
     this._bgSetSeq = 1;
+    this.spriteSets = new Map();
+    this.maxSpriteSets = Math.max(1, options.maxSpriteSets ?? 12);
+    this._spriteSetSeq = 1;
     this._frameSeq = 0;
 
     this.activeBgSetId = 0;
@@ -48,6 +51,8 @@ export class TileCache {
 
     this._lastPtTile = null;
     this._lastPaletteManager = null;
+    this._lastChrSignature = null;
+    this._lastChrStateCatalog = [];
 
     this.prevBgBase = -1;
     this._prevSpriteSignature = null;
@@ -77,6 +82,7 @@ export class TileCache {
     this._updatedBgSetGroups.clear();
     this._lastPtTile = ptTile;
     this._lastPaletteManager = paletteManager;
+    this._lastChrStateCatalog = Array.isArray(chrStateCatalog) ? chrStateCatalog : [];
 
     const normalizedBgBase = bgBase >= 256 ? 256 : 0;
     const bgBaseChanged = normalizedBgBase !== this.prevBgBase;
@@ -86,6 +92,7 @@ export class TileCache {
     let sprBank0Dirty = false;
     let sprBank1Dirty = false;
     const currentSignature = this._normalizeFullSignature(chrBankSignature);
+    this._lastChrSignature = this._cloneFullSignature(currentSignature);
     if (Array.isArray(chrBankSignature) && chrBankSignature.length >= 8) {
       bgBankDirty = this._checkBankDirty(chrBankSignature, normalizedBgBase);
       sprBank0Dirty = this._checkBankDirty(chrBankSignature, 0);
@@ -226,6 +233,53 @@ export class TileCache {
     }
 
     return `bg-set-${set.id}`;
+  }
+
+  /**
+   * Activate/select a sprite sheet set for a region signature.
+   * Returns a class token to combine with sprite palette/bank classes.
+   * @param {Array} chrSignature
+   * @param {Array} chrStateCatalog
+   */
+  activateSpriteSet(chrSignature, chrStateCatalog = this._lastChrStateCatalog) {
+    const signature = this._normalizeFullSignature(chrSignature);
+    const key = this._buildSpriteSetKey(signature);
+    const { set, isNew } = this._getOrCreateSpriteSet(key, signature);
+
+    const paletteManager = this._lastPaletteManager;
+    if (!paletteManager || !this._lastPtTile) {
+      return `spr-set-${set.id}`;
+    }
+
+    const paletteDirty = paletteManager.dirtySprGroups || new Set();
+    const currentSignature = this._lastChrSignature || signature;
+    const catalog = Array.isArray(chrStateCatalog) ? chrStateCatalog : this._lastChrStateCatalog;
+    const tilesB0 = this._resolveSpriteBankTiles(0, signature, currentSignature, this._lastPtTile, catalog);
+    const tilesB1 = this._resolveSpriteBankTiles(256, signature, currentSignature, this._lastPtTile, catalog);
+
+    let changed = false;
+    for (let palGroup = 0; palGroup < 4; palGroup++) {
+      const idx = palGroup;
+      if (isNew || !set.urls[idx] || paletteDirty.has(palGroup)) {
+        const colors = paletteManager.getSprPaletteGroup(palGroup);
+        set.urls[idx] = this._renderTilesToSheetSlice(set.canvases[idx], set.contexts[idx], tilesB0, colors);
+        changed = true;
+      }
+    }
+    for (let palGroup = 0; palGroup < 4; palGroup++) {
+      const idx = 4 + palGroup;
+      if (isNew || !set.urls[idx] || paletteDirty.has(palGroup)) {
+        const colors = paletteManager.getSprPaletteGroup(palGroup);
+        set.urls[idx] = this._renderTilesToSheetSlice(set.canvases[idx], set.contexts[idx], tilesB1, colors);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this._updateStylesheet();
+    }
+
+    return `spr-set-${set.id}`;
   }
 
   getTilePosition(index) {
@@ -413,6 +467,47 @@ export class TileCache {
     };
   }
 
+  _buildSpriteSetKey(signature) {
+    const norm = this._normalizeFullSignature(signature);
+    const tokens = norm.map((entry) => this._signatureEntryToken(entry));
+    return tokens.join(',');
+  }
+
+  _getOrCreateSpriteSet(key, signature) {
+    let set = this.spriteSets.get(key);
+    let isNew = false;
+    if (!set) {
+      set = this._createSpriteSetRecord(key, signature);
+      this.spriteSets.set(key, set);
+      isNew = true;
+      this._evictSpriteSetsIfNeeded(key);
+    }
+    set.lastUsedFrame = this._frameSeq;
+    return { set, isNew };
+  }
+
+  _createSpriteSetRecord(key, signature) {
+    const canvases = new Array(8);
+    const contexts = new Array(8);
+    for (let i = 0; i < 8; i++) {
+      const c = document.createElement('canvas');
+      c.width = 128;
+      c.height = 128;
+      canvases[i] = c;
+      contexts[i] = c.getContext('2d');
+    }
+
+    return {
+      id: this._spriteSetSeq++,
+      key,
+      signature: this._cloneFullSignature(signature),
+      canvases,
+      contexts,
+      urls: new Array(8).fill(null),
+      lastUsedFrame: this._frameSeq,
+    };
+  }
+
   _setNeedsImages(set) {
     return !set.urls[0] || !set.urls[1] || !set.urls[2] || !set.urls[3];
   }
@@ -455,6 +550,24 @@ export class TileCache {
         this.activeBgKey = null;
         this.activeBgSetId = 0;
       }
+    }
+  }
+
+  _evictSpriteSetsIfNeeded(preferredKey) {
+    while (this.spriteSets.size > this.maxSpriteSets) {
+      let oldestKey = null;
+      let oldestFrame = Infinity;
+
+      for (const [key, set] of this.spriteSets) {
+        if (key === preferredKey) continue;
+        if (set.lastUsedFrame < oldestFrame) {
+          oldestFrame = set.lastUsedFrame;
+          oldestKey = key;
+        }
+      }
+
+      if (!oldestKey) break;
+      this.spriteSets.delete(oldestKey);
     }
   }
 
@@ -709,6 +822,19 @@ export class TileCache {
     for (let i = 0; i < 4; i++) {
       if (this.blobUrls[8 + i]) {
         css += `.spr-b1-pal-${i} { background-image: url("${this.blobUrls[8 + i]}"); }\n`;
+      }
+    }
+
+    for (const set of this.spriteSets.values()) {
+      for (let palGroup = 0; palGroup < 4; palGroup++) {
+        const urlB0 = set.urls[palGroup];
+        if (urlB0) {
+          css += `.spr-set-${set.id}.spr-b0-pal-${palGroup} { background-image: url("${urlB0}"); }\n`;
+        }
+        const urlB1 = set.urls[4 + palGroup];
+        if (urlB1) {
+          css += `.spr-set-${set.id}.spr-b1-pal-${palGroup} { background-image: url("${urlB1}"); }\n`;
+        }
       }
     }
 

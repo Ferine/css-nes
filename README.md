@@ -19,7 +19,7 @@ The npm package name is currently `css-snes` (`package.json`), while the app/UI 
 
 - `3,840` pre-created BG tile nodes (`4 x 32 x 30`)
 - `64` sprite nodes + `128` sprite-half child nodes (for 8x16 support)
-- `12` logical spritesheet slots in `TileCache` (4 BG + 8 SPR)
+- `12` base spritesheet slots in `TileCache` (4 BG + 8 SPR), plus cached per-region sprite set variants (`spr-set-*`) when timing data diverges mid-frame
 - `5` debug overlay types
 - `4` inspector panels (NT, Palette, OAM, CHR)
 - `1` runtime stylesheet (`#tile-cache-styles`) rewritten as tiles/palettes update
@@ -67,6 +67,7 @@ Because "what if Chrome DevTools could inspect live NES tiles and sprites as rea
 - Sprite layer for 64 sprites with `8x8` and `8x16` handling.
 - Tile cache that builds PNG spritesheets and rewrites a runtime stylesheet.
 - BG set caching keyed by pattern-table base + CHR signature (supports multiple active BG sets for region rendering).
+- Per-region sprite sheet binding (`spr-set-*`) so sprites can use the region-appropriate CHR signature during mapper-heavy SMB3-style mid-frame changes.
 - PPU write tracing (`$2000/$2001/$2005/$2006` + optional mapper writes) and scanline state model.
 - Region planner + region BG compositor (`BGRegionLayer`) for split-scroll style scenes (currently capped to 2 regions).
 - Annotation popover while paused:
@@ -151,9 +152,8 @@ npm run test:e2e
 
 Latest local run in this workspace (2026-02-27):
 
-- `npm test`: 11 files, 114 tests passed
+- `npm test`: 11 files, 118 tests passed
 - `npm run test:e2e`: 5 Playwright tests passed
-- `npm run build`: production build succeeded
 
 E2E tests use ROMs from `roms/` and compare CSS output against a canvas reference (pixel diff thresholds vary by scenario).
 
@@ -162,6 +162,7 @@ E2E tests use ROMs from `roms/` and compare CSS output against a canvas referenc
 - Region timing is scanline-level modeling, not cycle-accurate.
 - Region compositor currently uses at most 2 vertical regions.
 - Sprite priority vs BG is approximated with z-index, so per-pixel NES priority behavior is not exact.
+- Some SMB3 1-1 windows still show elevated transient CSS-vs-canvas diff during heavy mid-frame timing churn, even after region-aware sprite CHR binding.
 - No audio output (audio samples are discarded).
 
 ## Credits

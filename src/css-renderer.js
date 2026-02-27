@@ -71,6 +71,7 @@ export class CSSRenderer {
       ? ppuState.renderPlan.regions
       : null;
     const spriteChrSignature = this._resolveSpriteCHRSignature(ppuState, renderRegions);
+    const spriteRegionPlan = this._buildSpriteRegionPlan(ppuState, renderRegions);
 
     // 1. Update palettes
     this.paletteManager.update(ppuState.bgPalette, ppuState.sprPalette);
@@ -106,8 +107,8 @@ export class CSSRenderer {
 
     // 4. Update sprite layer (respect UI override)
     const sprState = this.layerVisible.sprites
-      ? { ...ppuState, spritesVisible: effectiveSpritesVisible }
-      : { ...ppuState, spritesVisible: false };
+      ? { ...ppuState, spritesVisible: effectiveSpritesVisible, spriteRegionPlan }
+      : { ...ppuState, spritesVisible: false, spriteRegionPlan };
     this.spriteLayer.update(sprState, this.tileCache);
 
     // 5. Viewport background color
@@ -240,4 +241,32 @@ export class CSSRenderer {
 
     return ppuState.chrBankSignature;
   }
+
+  _buildSpriteRegionPlan(ppuState, renderRegions) {
+    const regions = Array.isArray(renderRegions) && renderRegions.length > 0
+      ? renderRegions
+      : [{
+        yStart: 0,
+        yEnd: 240,
+        chrSignature: ppuState.chrBankSignature,
+      }];
+
+    const out = [];
+    for (const region of regions) {
+      const yStart = _clampInt(region?.yStart, 0, 239);
+      const yEnd = _clampInt(region?.yEnd, yStart + 1, 240);
+      const signature = Array.isArray(region?.chrSignature) && region.chrSignature.length >= 8
+        ? region.chrSignature
+        : ppuState.chrBankSignature;
+      const setClass = this.tileCache.activateSpriteSet(signature, ppuState.chrStateCatalog);
+      out.push({ yStart, yEnd, setClass });
+    }
+
+    return out;
+  }
+}
+
+function _clampInt(value, min, max) {
+  const v = Number.isFinite(value) ? Math.trunc(value) : min;
+  return Math.max(min, Math.min(max, v));
 }

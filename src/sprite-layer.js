@@ -51,6 +51,7 @@ export class SpriteLayer {
    */
   update(ppuState, tileCache) {
     const { sprites, sprPatternBase, spriteSize, spritesVisible } = ppuState;
+    const spriteRegionPlan = Array.isArray(ppuState.spriteRegionPlan) ? ppuState.spriteRegionPlan : null;
 
     this.spriteLayer.style.display = spritesVisible ? '' : 'none';
     if (!spritesVisible) return;
@@ -98,19 +99,20 @@ export class SpriteLayer {
       div.dataset.flipH = spr.flipH ? 1 : 0;
       div.dataset.flipV = spr.flipV ? 1 : 0;
       div.dataset.priority = spr.behindBg ? 'behind-bg' : 'in-front';
+      const spriteSetClass = this._resolveSpriteSetClass(sprY, sprHeight, spriteRegionPlan);
 
       if (is8x16) {
-        this._update8x16(i, spr, palGroup, scaleX, scaleY, sprPatternBase, tileCache);
+        this._update8x16(i, spr, palGroup, scaleX, scaleY, sprPatternBase, tileCache, spriteSetClass);
       } else {
-        this._update8x8(i, spr, palGroup, scaleX, scaleY, sprPatternBase, tileCache);
+        this._update8x8(i, spr, palGroup, scaleX, scaleY, sprPatternBase, tileCache, spriteSetClass);
       }
     }
   }
 
-  _update8x8(i, spr, palGroup, scaleX, scaleY, sprBase, tileCache) {
+  _update8x8(i, spr, palGroup, scaleX, scaleY, sprBase, tileCache, spriteSetClass) {
     const div = this.spriteDivs[i];
     const bankIdx = sprBase === 0 ? 0 : 1;
-    div.className = `sprite spr-b${bankIdx}-pal-${palGroup}`;
+    div.className = _joinClasses('sprite', spriteSetClass, `spr-b${bankIdx}-pal-${palGroup}`);
     div.style.backgroundPosition = tileCache.getTilePosition(spr.tileIndex);
     div.style.transform = `scale(${scaleX}, ${scaleY})`;
 
@@ -119,7 +121,7 @@ export class SpriteLayer {
     this.spriteBotDivs[i].style.display = 'none';
   }
 
-  _update8x16(i, spr, palGroup, scaleX, scaleY, sprBase, tileCache) {
+  _update8x16(i, spr, palGroup, scaleX, scaleY, sprBase, tileCache, spriteSetClass) {
     const div = this.spriteDivs[i];
     div.className = `sprite-8x16`;
     div.style.transform = `scale(${scaleX}, ${scaleY})`;
@@ -141,8 +143,8 @@ export class SpriteLayer {
     botDiv.style.display = '';
 
     const palClass = `spr-b${bankIdx}-pal-${palGroup}`;
-    topDiv.className = `sprite-half ${palClass}`;
-    botDiv.className = `sprite-half ${palClass}`;
+    topDiv.className = _joinClasses('sprite-half', spriteSetClass, palClass);
+    botDiv.className = _joinClasses('sprite-half', spriteSetClass, palClass);
 
     // If vertically flipped, swap top/bottom tiles
     if (spr.flipV) {
@@ -152,6 +154,24 @@ export class SpriteLayer {
       topDiv.style.backgroundPosition = tileCache.getTilePosition(topTileIdx);
       botDiv.style.backgroundPosition = tileCache.getTilePosition(botTileIdx);
     }
+  }
+
+  _resolveSpriteSetClass(sprY, sprHeight, spriteRegionPlan) {
+    if (!Array.isArray(spriteRegionPlan) || spriteRegionPlan.length === 0) return '';
+
+    let best = null;
+    let bestOverlap = -1;
+    for (const region of spriteRegionPlan) {
+      const yStart = region?.yStart ?? 0;
+      const yEnd = region?.yEnd ?? 240;
+      const overlap = Math.min(sprY + sprHeight, yEnd) - Math.max(sprY, yStart);
+      if (overlap > bestOverlap) {
+        bestOverlap = overlap;
+        best = region;
+      }
+    }
+
+    return best?.setClass || '';
   }
 
   _updateSpriteMode(is8x16) {
@@ -166,4 +186,8 @@ export class SpriteLayer {
       }
     }
   }
+}
+
+function _joinClasses(...parts) {
+  return parts.filter(Boolean).join(' ');
 }

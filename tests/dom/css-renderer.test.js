@@ -363,4 +363,51 @@ describe('CSSRenderer (DOM)', () => {
 
     expect(capturedSpriteSig).toEqual(bottomSig);
   });
+
+  it('binds sprite classes to per-region sprite sheet sets', () => {
+    const renderer = new CSSRenderer(wrapper);
+
+    const topSig = [101, 102, 103, 104, 105, 106, 107, 108];
+    const bottomSig = [201, 202, 203, 204, 205, 206, 207, 208];
+    renderer.tileCache.activateSpriteSet = (sig) => (sig[0] === 101 ? 'spr-set-top' : 'spr-set-bottom');
+
+    const state = createMockPPUState({
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 120,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+            chrSignature: topSig,
+          },
+          {
+            yStart: 120,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+            chrSignature: bottomSig,
+          },
+        ],
+      },
+    });
+
+    state.sprites[0] = { x: 20, y: 20, tileIndex: 2, palette: 0, flipH: false, flipV: false, behindBg: false };
+    state.sprites[1] = { x: 20, y: 180, tileIndex: 3, palette: 0, flipH: false, flipV: false, behindBg: false };
+
+    renderer.renderFrame(state);
+
+    expect(renderer.spriteLayer.spriteDivs[0].className).toContain('spr-set-top');
+    expect(renderer.spriteLayer.spriteDivs[1].className).toContain('spr-set-bottom');
+  });
 });
