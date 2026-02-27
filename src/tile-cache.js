@@ -50,6 +50,7 @@ export class TileCache {
     this._lastPaletteManager = null;
 
     this.prevBgBase = -1;
+    this._prevSpriteSignature = null;
     this._consecRegenFrames = 0;
   }
 
@@ -60,8 +61,17 @@ export class TileCache {
    * @param {number} sprBase
    * @param {Array} chrBankSignature
    * @param {Array} chrStateCatalog - optional [{ key, bgBase, signature[4], tiles[256] }]
+   * @param {Array|null} spriteChrSignature - optional 8-region signature for sprite sheets
    */
-  update(ptTile, paletteManager, bgBase, sprBase, chrBankSignature, chrStateCatalog = []) {
+  update(
+    ptTile,
+    paletteManager,
+    bgBase,
+    sprBase,
+    chrBankSignature,
+    chrStateCatalog = [],
+    spriteChrSignature = null
+  ) {
     this._frameSeq++;
     this.updatedSheets.clear();
     this._updatedBgSetGroups.clear();
@@ -75,6 +85,7 @@ export class TileCache {
     let bgBankDirty = false;
     let sprBank0Dirty = false;
     let sprBank1Dirty = false;
+    const currentSignature = this._normalizeFullSignature(chrBankSignature);
     if (Array.isArray(chrBankSignature) && chrBankSignature.length >= 8) {
       bgBankDirty = this._checkBankDirty(chrBankSignature, normalizedBgBase);
       sprBank0Dirty = this._checkBankDirty(chrBankSignature, 0);
@@ -111,14 +122,39 @@ export class TileCache {
 
     this._renderDirtyPaletteGroupsAcrossBgSets(paletteManager, skipPaletteSetIds);
 
-    // Sprite sheets are still global and rendered from frame-end PT mapping.
-    const spr0Dirty = sprBank0Dirty || chrDirtyPT0;
-    const spr1Dirty = sprBank1Dirty || chrDirtyPT1;
+    // Sprite sheets are global, but we can target a specific CHR signature
+    // (typically the gameplay region signature) when timing data is available.
+    const targetSpriteSignature = this._normalizeFullSignature(
+      Array.isArray(spriteChrSignature) && spriteChrSignature.length >= 8
+        ? spriteChrSignature
+        : currentSignature
+    );
+    const spriteBank0SigChanged = this._signatureSliceChanged(this._prevSpriteSignature, targetSpriteSignature, 0);
+    const spriteBank1SigChanged = this._signatureSliceChanged(this._prevSpriteSignature, targetSpriteSignature, 4);
+    this._prevSpriteSignature = this._cloneFullSignature(targetSpriteSignature);
+
+    const spriteBank0Tiles = this._resolveSpriteBankTiles(
+      0,
+      targetSpriteSignature,
+      currentSignature,
+      ptTile,
+      chrStateCatalog
+    );
+    const spriteBank1Tiles = this._resolveSpriteBankTiles(
+      256,
+      targetSpriteSignature,
+      currentSignature,
+      ptTile,
+      chrStateCatalog
+    );
+
+    const spr0Dirty = sprBank0Dirty || chrDirtyPT0 || spriteBank0SigChanged;
+    const spr1Dirty = sprBank1Dirty || chrDirtyPT1 || spriteBank1SigChanged;
 
     for (let palGroup = 0; palGroup < 4; palGroup++) {
       if (paletteManager.dirtySprGroups.has(palGroup) || spr0Dirty) {
         const colors = paletteManager.getSprPaletteGroup(palGroup);
-        this._renderSpriteSheet(4 + palGroup, ptTile, 0, colors);
+        this._renderSpriteSheetFromSlice(4 + palGroup, spriteBank0Tiles, colors);
         this.updatedSheets.add(4 + palGroup);
       }
     }
@@ -126,7 +162,7 @@ export class TileCache {
     for (let palGroup = 0; palGroup < 4; palGroup++) {
       if (paletteManager.dirtySprGroups.has(palGroup) || spr1Dirty) {
         const colors = paletteManager.getSprPaletteGroup(palGroup);
-        this._renderSpriteSheet(8 + palGroup, ptTile, 256, colors);
+        this._renderSpriteSheetFromSlice(8 + palGroup, spriteBank1Tiles, colors);
         this.updatedSheets.add(8 + palGroup);
       }
     }
@@ -269,6 +305,12 @@ export class TileCache {
     const canvas = this.canvases[sheetIndex];
     const ctx = this.contexts[sheetIndex];
     this.blobUrls[sheetIndex] = this._renderTilesToSheetRange(canvas, ctx, ptTile, base, colors);
+  }
+
+  _renderSpriteSheetFromSlice(sheetIndex, tileSlice, colors) {
+    const canvas = this.canvases[sheetIndex];
+    const ctx = this.contexts[sheetIndex];
+    this.blobUrls[sheetIndex] = this._renderTilesToSheetSlice(canvas, ctx, tileSlice, colors);
   }
 
   _renderTilesToSheetRange(canvas, ctx, ptTile, base, colors) {
@@ -457,6 +499,110 @@ export class TileCache {
         : (entry ?? 0);
     }
     return out;
+  }
+
+  _normalizeFullSignature(signature) {
+    const out = new Array(8);
+    for (let i = 0; i < 8; i++) {
+      const entry = Array.isArray(signature) ? signature[i] : null;
+      out[i] = Array.isArray(entry)
+        ? [entry[0] ?? null, entry[1] ?? null, entry[2] ?? null, entry[3] ?? null]
+        : (entry ?? 0);
+    }
+    return out;
+  }
+
+  _cloneFullSignature(signature) {
+    if (!Array.isArray(signature)) return null;
+    const out = new Array(8);
+    for (let i = 0; i < 8; i++) {
+      const entry = signature[i];
+      out[i] = Array.isArray(entry)
+        ? [entry[0] ?? null, entry[1] ?? null, entry[2] ?? null, entry[3] ?? null]
+        : (entry ?? 0);
+    }
+    return out;
+  }
+
+  _signatureSliceChanged(prev, next, start) {
+    if (!Array.isArray(next) || next.length < start + 4) return true;
+    if (!Array.isArray(prev) || prev.length < start + 4) return true;
+    for (let i = 0; i < 4; i++) {
+      if (!this._sameSignatureEntry(prev[start + i], next[start + i])) return true;
+    }
+    return false;
+  }
+
+  _signatureSliceEquals(a, b, start) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length < start + 4 || b.length < start + 4) return false;
+    for (let i = 0; i < 4; i++) {
+      if (!this._sameSignatureEntry(a[start + i], b[start + i])) return false;
+    }
+    return true;
+  }
+
+  _resolveSpriteBankTiles(ptBase, targetSignature, currentSignature, ptTile, chrStateCatalog) {
+    const start = ptBase >= 256 ? 4 : 0;
+    if (this._signatureSliceEquals(targetSignature, currentSignature, start)) {
+      return this._slicePT(ptTile, ptBase);
+    }
+
+    const fromCatalog = this._lookupCatalogTiles(ptBase, targetSignature, chrStateCatalog);
+    if (fromCatalog) return fromCatalog;
+
+    // Fallback to current frame mapping when historical state isn't available.
+    return this._slicePT(ptTile, ptBase);
+  }
+
+  _lookupCatalogTiles(bgBase, fullSignature, chrStateCatalog) {
+    if (!Array.isArray(chrStateCatalog) || chrStateCatalog.length === 0) return null;
+
+    const key = this._buildCatalogKey(bgBase, fullSignature);
+    for (const state of chrStateCatalog) {
+      if (!Array.isArray(state?.tiles) || state.tiles.length < 256) continue;
+      if (state.key === key) return state.tiles.slice(0, 256);
+    }
+
+    const targetBase = bgBase >= 256 ? 256 : 0;
+    const expected = this._extractSignatureSliceFromFull(fullSignature, targetBase);
+    for (const state of chrStateCatalog) {
+      if (!Array.isArray(state?.tiles) || state.tiles.length < 256) continue;
+      if ((state.bgBase >= 256 ? 256 : 0) !== targetBase) continue;
+      const sig = this._normalizeSignatureSlice(state.signature);
+      if (
+        this._sameSignatureEntry(sig[0], expected[0]) &&
+        this._sameSignatureEntry(sig[1], expected[1]) &&
+        this._sameSignatureEntry(sig[2], expected[2]) &&
+        this._sameSignatureEntry(sig[3], expected[3])
+      ) {
+        return state.tiles.slice(0, 256);
+      }
+    }
+
+    return null;
+  }
+
+  _buildCatalogKey(bgBase, fullSignature) {
+    const base = bgBase >= 256 ? 256 : 0;
+    const slice = this._extractSignatureSliceFromFull(fullSignature, base);
+    const tokens = slice.map((entry) => this._signatureScalar(entry));
+    return `${base}:${tokens.join(',')}`;
+  }
+
+  _extractSignatureSliceFromFull(fullSignature, bgBase) {
+    const start = bgBase >= 256 ? 4 : 0;
+    return this._normalizeSignatureSlice([
+      fullSignature?.[start + 0] ?? 0,
+      fullSignature?.[start + 1] ?? 0,
+      fullSignature?.[start + 2] ?? 0,
+      fullSignature?.[start + 3] ?? 0,
+    ]);
+  }
+
+  _signatureScalar(entry) {
+    if (Array.isArray(entry)) return entry[0] ?? 0;
+    return entry ?? 0;
   }
 
   _signatureEntryToken(entry) {

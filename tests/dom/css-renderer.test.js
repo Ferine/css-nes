@@ -219,4 +219,148 @@ describe('CSSRenderer (DOM)', () => {
 
     expect(renderer.spriteLayer.spriteLayer.style.display).toBe('none');
   });
+
+  it('keeps sprites visible when canonical regions include visible scanlines', () => {
+    const renderer = new CSSRenderer(wrapper);
+    const state = createMockPPUState({
+      spritesVisible: true,
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        // Compressed regions incorrectly collapse to hidden-only.
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: false,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+        // Canonical model still has visible sprite scanlines.
+        canonicalRegions: [
+          {
+            yStart: 0,
+            yEnd: 10,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: false,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+          {
+            yStart: 10,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+      },
+    });
+
+    renderer.renderFrame(state);
+
+    expect(renderer.spriteLayer.spriteLayer.style.display).toBe('');
+  });
+
+  it('hides sprites when canonical regions are all hidden', () => {
+    const renderer = new CSSRenderer(wrapper);
+    const state = createMockPPUState({
+      spritesVisible: true,
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+        canonicalRegions: [
+          {
+            yStart: 0,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: false,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+          },
+        ],
+      },
+    });
+
+    renderer.renderFrame(state);
+
+    expect(renderer.spriteLayer.spriteLayer.style.display).toBe('none');
+  });
+
+  it('selects sprite CHR signature from the region that contains visible sprites', () => {
+    const renderer = new CSSRenderer(wrapper);
+
+    const topSig = [11, 12, 13, 14, 15, 16, 17, 18];
+    const bottomSig = [21, 22, 23, 24, 25, 26, 27, 28];
+    let capturedSpriteSig = null;
+    const origUpdate = renderer.tileCache.update.bind(renderer.tileCache);
+    renderer.tileCache.update = (...args) => {
+      capturedSpriteSig = args[6];
+      return origUpdate(...args);
+    };
+
+    const state = createMockPPUState({
+      chrBankSignature: [1, 2, 3, 4, 5, 6, 7, 8],
+      renderPlan: {
+        mode: 'region',
+        eventCount: 1,
+        regions: [
+          {
+            yStart: 0,
+            yEnd: 120,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+            chrSignature: topSig,
+          },
+          {
+            yStart: 120,
+            yEnd: 240,
+            scroll: { coarseX: 0, coarseY: 0, fineX: 0, fineY: 0, nameTableH: 0, nameTableV: 0 },
+            bgVisible: true,
+            spritesVisible: true,
+            bgPatternBase: 0,
+            sprPatternBase: 0,
+            spriteSize: 0,
+            chrSignature: bottomSig,
+          },
+        ],
+      },
+    });
+
+    // Put two sprites in the lower region and one in the upper region.
+    state.sprites[0] = { x: 10, y: 30, tileIndex: 1, palette: 0, flipH: false, flipV: false, behindBg: false };
+    state.sprites[1] = { x: 20, y: 150, tileIndex: 2, palette: 0, flipH: false, flipV: false, behindBg: false };
+    state.sprites[2] = { x: 40, y: 170, tileIndex: 3, palette: 0, flipH: false, flipV: false, behindBg: false };
+
+    renderer.renderFrame(state);
+
+    expect(capturedSpriteSig).toEqual(bottomSig);
+  });
 });

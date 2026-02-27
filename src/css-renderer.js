@@ -67,6 +67,11 @@ export class CSSRenderer {
    * Render one frame from extracted PPU state.
    */
   renderFrame(ppuState) {
+    const renderRegions = Array.isArray(ppuState.renderPlan?.regions)
+      ? ppuState.renderPlan.regions
+      : null;
+    const spriteChrSignature = this._resolveSpriteCHRSignature(ppuState, renderRegions);
+
     // 1. Update palettes
     this.paletteManager.update(ppuState.bgPalette, ppuState.sprPalette);
 
@@ -77,12 +82,10 @@ export class CSSRenderer {
       ppuState.bgPatternBase,
       ppuState.sprPatternBase,
       ppuState.chrBankSignature,
-      ppuState.chrStateCatalog
+      ppuState.chrStateCatalog,
+      spriteChrSignature
     );
 
-    const renderRegions = Array.isArray(ppuState.renderPlan?.regions)
-      ? ppuState.renderPlan.regions
-      : null;
     const hiddenBgState = { ...ppuState, bgVisible: false };
     const effectiveSpritesVisible = this._resolveSpritesVisible(ppuState, renderRegions);
 
@@ -163,9 +166,78 @@ export class CSSRenderer {
   }
 
   _resolveSpritesVisible(ppuState, renderRegions) {
+    const canonicalRegions = ppuState?.renderPlan?.canonicalRegions;
+    if (Array.isArray(canonicalRegions) && canonicalRegions.length > 0) {
+      if (canonicalRegions.some((region) => region?.spritesVisible !== false)) return true;
+      return false;
+    }
+
     if (Array.isArray(renderRegions) && renderRegions.length > 0) {
-      return renderRegions.some((region) => region?.spritesVisible !== false);
+      if (renderRegions.some((region) => region?.spritesVisible !== false)) return true;
+      return false;
     }
     return !!ppuState.spritesVisible;
+  }
+
+  _resolveSpriteCHRSignature(ppuState, renderRegions) {
+    if (!Array.isArray(renderRegions) || renderRegions.length === 0) {
+      return ppuState.chrBankSignature;
+    }
+
+    const hasRegionSignature = renderRegions.some(
+      (region) => Array.isArray(region?.chrSignature) && region.chrSignature.length >= 8
+    );
+    if (!hasRegionSignature) {
+      return ppuState.chrBankSignature;
+    }
+
+    const spriteHeight = ppuState.spriteSize === 1 ? 16 : 8;
+    const scores = new Array(renderRegions.length).fill(0);
+
+    for (const spr of ppuState.sprites) {
+      const y = (spr?.y ?? 0) + 1;
+      if (y >= 240 || y + spriteHeight <= 0) continue;
+
+      let bestIdx = -1;
+      let bestOverlap = 0;
+
+      for (let i = 0; i < renderRegions.length; i++) {
+        const region = renderRegions[i];
+        const yStart = region?.yStart ?? 0;
+        const yEnd = region?.yEnd ?? 240;
+        const overlap = Math.min(y + spriteHeight, yEnd) - Math.max(y, yStart);
+        if (overlap > bestOverlap) {
+          bestOverlap = overlap;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx >= 0) {
+        scores[bestIdx]++;
+      }
+    }
+
+    let bestRegionIdx = -1;
+    let bestScore = -1;
+    for (let i = 0; i < renderRegions.length; i++) {
+      const region = renderRegions[i];
+      if (!Array.isArray(region?.chrSignature) || region.chrSignature.length < 8) continue;
+      if (scores[i] > bestScore) {
+        bestScore = scores[i];
+        bestRegionIdx = i;
+      }
+    }
+
+    if (bestRegionIdx >= 0) {
+      return renderRegions[bestRegionIdx].chrSignature;
+    }
+
+    for (const region of renderRegions) {
+      if (Array.isArray(region?.chrSignature) && region.chrSignature.length >= 8) {
+        return region.chrSignature;
+      }
+    }
+
+    return ppuState.chrBankSignature;
   }
 }
