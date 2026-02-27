@@ -1,25 +1,28 @@
 # CSS-NES
 
-A NES emulator that renders entirely through the DOM. No `<canvas>`. No WebGL. Every single pixel you see is a CSS `background-position` offset into a spritesheet, laid out on a CSS Grid, scrolled with `transform: translate()`. You can right-click any tile Mario is standing on and inspect it in DevTools — or just click it while paused to get a full PPU annotation popover.
+NES rendering experiment that does the wrong thing on purpose: it draws with DOM + CSS layers instead of a framebuffer canvas.
 
-This is not a good idea. It works anyway.
+No `<canvas>` in CSS mode. No WebGL. Just tiles, spritesheets, transforms, and a browser layout engine pretending to be a PPU compositor.
 
-## By the Numbers
+It is absolutely not the normal way to render an NES. It does work.
 
-Every frame of NES gameplay maintains:
+Current implementation status in this repo:
 
-- **3,904 DOM elements** — 3,840 background tiles (4 nametable quadrants x 960 tiles each) + 64 sprite divs
-- **12 dynamically generated PNG spritesheets** — 4 BG palette variants + 4 sprite bank 0 variants + 4 sprite bank 1 variants, base64-encoded and injected into a `<style>` element as `background-image` rules
-- **~30 data attributes per visible element** — VRAM addresses, tile indices in hex, palette groups, pixel coordinates, flip state, priority, OAM addresses
-- **1 `<style>` tag rewritten at runtime** — because updating a CSS rule is faster than touching 960 `div.style.backgroundImage` properties
-- **5 debug overlay layers** — tile grid, sprite bounding boxes with OAM indices, palette region heatmap, sprite-0 scroll split line, nametable seam markers
-- **3 inspector panels** — nametable minimap, palette swatch viewer, OAM sprite table with hover-to-highlight
+- jsnes drives CPU/PPU emulation.
+- `CSSRenderer` renders from extracted PPU state (`nes.ppu`) into layered DOM.
+- Optional `Canvas Mode` renders from `ppu.buffer` for side-by-side sanity checks.
+- Includes debug overlays, inspector panels, timing-trace plumbing, and test harnesses.
 
-A normal renderer writes 61,440 pixel values to a framebuffer. This one maintains a living DOM tree where the browser's layout engine does the compositing. The Chrome DevTools Elements panel becomes a PPU debugger.
+The npm package name is currently `css-snes` (`package.json`), while the app/UI label is `CSS-NES`.
 
-## Why
+## By the Numbers (Current Code)
 
-Because the question "what if the browser's layout engine was the PPU compositor" deserved an answer, even if that answer is "please don't." Every background tile, sprite, palette, and scroll value is exposed as data attributes on real DOM elements. Pause the emulator, open Elements, hover a tile, see its VRAM address. Or just click it — the annotation popover shows you the nametable address, raw bytes, a color-mapped CHR pixel grid, and palette swatches without opening DevTools at all. The rest is a crime against rendering pipelines.
+- `3,840` pre-created BG tile nodes (`4 x 32 x 30`)
+- `64` sprite nodes + `128` sprite-half child nodes (for 8x16 support)
+- `12` logical spritesheet slots in `TileCache` (4 BG + 8 SPR)
+- `5` debug overlay types
+- `4` inspector panels (NT, Palette, OAM, CHR)
+- `1` runtime stylesheet (`#tile-cache-styles`) rewritten as tiles/palettes update
 
 ## Quick Start
 
@@ -28,168 +31,141 @@ npm install
 npm run dev
 ```
 
-Drop a `.nes` ROM file onto the page or use the Load ROM button.
+Open the app, then drag/drop a `.nes` ROM or use the **Load ROM** button.
 
 ## Controls
 
+### NES Input
+
 | Key | NES Button |
-|-----|-----------|
+| --- | --- |
 | Arrow keys | D-pad |
-| Z | A |
-| X | B |
+| `Z` | A |
+| `X` | B |
 | Right Shift | Select |
 | Enter | Start |
 
-**Debug & Inspector Shortcuts:** `B` BG layer, `S` Sprites, `1-5` debug overlays, `N` nametable map, `P` palette viewer, `O` OAM table.
+### Runtime Controls
 
-## How It Works
+- `Pause` / `Resume` button pauses emulation.
+- `Step` runs one frame while paused.
+- `Canvas Mode` toggles CSS renderer vs canvas reference.
 
-The renderer reads PPU structural state directly from `nes.ppu` — nametables, OAM, pattern tables, palettes, scroll registers — rather than the framebuffer. This state drives a layered CSS rendering pipeline:
+### Layer / Debug / Inspector Shortcuts
 
-```
-nes.frame() -> onFrame -> PPUStateExtractor.extract()
-  -> PaletteManager    (NES palette -> CSS hex colors, dirty tracking)
-  -> TileCache          (CHR tiles + palettes -> 128x128 spritesheet PNGs)
-  -> BGLayer            (4 nametable quadrants as 32x30 CSS Grids, diff updates)
-  -> SpriteLayer        (64 absolutely-positioned sprite divs)
-  -> DebugOverlay       (5 toggleable visualization layers)
-  -> InspectorPanels    (nametable map, palette viewer, OAM table)
-```
+- Layers: `B` (BG), `S` (sprites)
+- Debug overlays: `1` grid, `2` sprite boxes, `3` palette regions, `4` split line, `5` nametable seams
+- Inspector panels: `N` nametable, `P` palette, `O` OAM, `C` CHR
 
-**Spritesheets, not inline styles.** The TileCache generates 12 PNG spritesheets (4 BG + 4 sprite bank 0 + 4 sprite bank 1) and injects them via a dynamic `<style>` element. Palette change = 1 CSS rule update, not 960 divs.
+## Why
 
-**Diff-based BG updates.** Only tiles that actually changed (index or attribute) get their DOM touched.
+Because "what if Chrome DevTools could inspect live NES tiles and sprites as real DOM elements?" was a question that deserved a practical answer and a mildly irresponsible renderer.
 
-**Scroll wrapping.** Nametable quadrants reposition dynamically to handle the 512x480 wraparound without duplicating DOM elements.
+## Implemented Features
 
-**Scanline-region split model (experimental).** Timed writes to `PPUCTRL`/`PPUMASK`/`PPUSCROLL`/`PPUADDR` are traced during each frame and reduced into per-scanline state, then compressed into vertical render regions. If multiple regions are detected, BG rendering switches from a single transform to a region compositor so HUD/gameplay splits can diverge.
-
-**CHR bank-switch detection.** The TileCache detects mapper bank switches (MMC3, etc.) via O(8) object-identity comparison of CHR region references. When `load1kVromBank` replaces Tile objects, the reference changes are caught instantly. A FNV-1a checksum fallback handles CHR-RAM games that modify tile pixel data in place.
-
-## Annotation Popover
-
-Pause the emulator and click any tile or sprite to inspect it. Shift+click any viewport pixel to open per-pixel provenance (BG source tile, overlapping sprites, winner, and final color). The popover shows:
-
-**BG Tiles:** nametable address, tile index, grid position, quadrant/physical NT mapping, pattern table base, raw nametable and attribute bytes, an 8x8 CHR pixel grid rendered with palette colors, and palette swatches.
-
-**Sprites:** OAM address and index, tile index, screen position, flip/priority flags, reconstructed raw OAM bytes (Y, tile, attributes, X), pattern table base, CHR pixel grid (8x8 or 8x16), and palette swatches.
-
-Click elsewhere to dismiss, click another element to switch targets, or unpause to auto-dismiss.
-
-## Debug Overlays
-
-Five toggleable overlay layers, accessible via toolbar buttons or the console API:
-
-| Overlay | Description |
-|---------|-------------|
-| **Tile Grid** | Red 8px grid lines over the background |
-| **Sprite Boxes** | Green outlines with OAM index labels on each sprite |
-| **Palette Regions** | Color-coded 16x16 blocks showing attribute table palette assignments |
-| **Scroll Split** | Orange dashed line at sprite-0 hit scanline |
-| **NT Seam** | Cyan dashed lines at nametable boundaries within the viewport |
-
-## Inspector Panels
-
-Three real-time inspector panels live in a collapsible side panel to the right of the viewport. Toggle them via toolbar buttons or keyboard shortcuts:
-
-| Panel | Shortcut | Description |
-|-------|----------|-------------|
-| **NT Map** | `N` | 512x480 nametable minimap drawn from TileCache spritesheets, with a scroll-position rectangle that wraps correctly across all 4 quadrants |
-| **Palette** | `P` | 8 palette groups (4 BG + 4 SPR) as color swatches; dirty groups flash briefly on change |
-| **OAM** | `O` | 64-row sprite table showing tile index, position, palette, and flip/priority flags; hover a row to highlight the sprite in the viewport |
-
-Panels are independently toggleable and stack vertically. The side panel auto-hides when all panels are closed.
-
-## DevTools Inspection
-
-Every element is labeled with NES-specific data attributes:
-
-**Viewport** (`div.nes-viewport`):
-`data-frame`, `data-scroll-x`, `data-scroll-y`, `data-bg-color`, `data-bg-pattern-table`, `data-spr-pattern-table`, `data-sprite-size`, `data-mirroring`
-
-**BG tiles** (`div.bg-tile`):
-`data-col`, `data-row`, `data-px-x`, `data-px-y`, `data-nt-addr` (VRAM address like `$2000`), `data-tile-idx`, `data-tile-hex`, `data-palette`, `data-quadrant`
-
-**Sprites** (`div.sprite`):
-`data-idx`, `data-oam-addr` (like `$04`), `data-x`, `data-y`, `data-tile-idx`, `data-tile-hex`, `data-palette`, `data-flip-h`, `data-flip-v`, `data-priority`
+- BG layer with 4 nametable quadrants (`32x30` tiles each), diff-based tile updates.
+- Sprite layer for 64 sprites with `8x8` and `8x16` handling.
+- Tile cache that builds PNG spritesheets and rewrites a runtime stylesheet.
+- BG set caching keyed by pattern-table base + CHR signature (supports multiple active BG sets for region rendering).
+- PPU write tracing (`$2000/$2001/$2005/$2006` + optional mapper writes) and scanline state model.
+- Region planner + region BG compositor (`BGRegionLayer`) for split-scroll style scenes (currently capped to 2 regions).
+- Annotation popover while paused:
+  - click tile/sprite for metadata + CHR/palette view
+  - shift+click for per-pixel provenance
+- Inspector side panel:
+  - Nametable minimap
+  - Palette viewer
+  - OAM table with hover highlight
+  - CHR pattern-table viewer
+- Stats counters in UI: FPS, DOM mutation count, DOM node count, visible sprite count, sheet regeneration count.
 
 ## Debug Console API
 
 ```js
-nesDebug.showTileGrid()       // toggle 8px grid overlay
-nesDebug.showSpriteBoxes()    // toggle sprite outlines + OAM labels
-nesDebug.showPaletteRegions() // toggle palette attribute heatmap
-nesDebug.showScrollSplit()    // toggle sprite-0 hit scanline
-nesDebug.showNametableSeam()  // toggle nametable boundary lines
-nesDebug.toggleAll()          // toggle all overlays on/off
-nesDebug.highlightPalette(2)  // log palette group colors to console
-nesDebug.annotate             // AnnotationPopover instance (.dismiss(), .isVisible)
-nesDebug.state                // current PPU state snapshot
-nesDebug.nes                  // raw jsnes NES instance
+nesDebug.showTileGrid()
+nesDebug.showSpriteBoxes()
+nesDebug.showPaletteRegions()
+nesDebug.showScrollSplit()
+nesDebug.showNametableSeam()
+nesDebug.toggleAll()
+nesDebug.highlightPalette(2)
+nesDebug.annotate // AnnotationPopover instance
+nesDebug.state    // latest extracted PPU state
+nesDebug.nes      // jsnes instance
 ```
 
-## Canvas Mode
+## How the Pipeline Works
 
-Click **Canvas Mode** to swap to a traditional framebuffer canvas renderer using `ppu.buffer`. Click **CSS Mode** to swap back. Useful for verifying correctness.
-
-## Architecture
-
+```text
+nes.frame()
+  -> PPUWriteTracer (optional timing trace)
+  -> PPUStateExtractor.extract()
+  -> CSSRenderer.renderFrame()
+       -> PaletteManager
+       -> TileCache
+       -> BGLayer or BGRegionLayer
+       -> SpriteLayer
+       -> DebugOverlay
+       -> Inspector panels
 ```
+
+The key idea is simple: extract structural PPU state, then let CSS positioning + layering do compositing work that would usually happen in a framebuffer loop.
+
+## Project Layout
+
+```text
 css-nes/
-├── index.html                 # Shell, controls, ROM loader
-├── styles/nes-layers.css      # Grid layout, tile/sprite styles, overlays, popover
-└── src/
-    ├── ppu-state-extractor.js # Reads nes.ppu internals into clean snapshots
-    ├── palette-manager.js     # 0xBBGGRR -> CSS hex, dirty group tracking
-    ├── tile-cache.js          # CHR tiles -> per-palette spritesheet PNGs, bank detection
-    ├── bg-layer.js            # 4 nametable quadrants, CSS Grid, diff updates
-    ├── sprite-layer.js        # 64 sprite divs, 8x8 + 8x16 support
-    ├── debug-overlay.js       # 5 toggleable visual debug layers
-    ├── annotation-popover.js  # Click-to-inspect PPU annotation popover
-    ├── nametable-viewer.js    # Inspector: 4-quadrant nametable minimap canvas
-    ├── palette-viewer.js      # Inspector: 8 palette groups as color swatches
-    ├── oam-viewer.js          # Inspector: 64-sprite OAM table with hover highlight
-    ├── css-renderer.js        # Orchestrates layers, owns viewport
-    └── app.js                 # jsnes integration, game loop, input, ROM loading
+├── index.html
+├── styles/nes-layers.css
+├── src/
+│   ├── app.js
+│   ├── css-renderer.js
+│   ├── ppu-state-extractor.js
+│   ├── ppu-write-tracer.js
+│   ├── scanline-state-builder.js
+│   ├── scroll-region-planner.js
+│   ├── palette-manager.js
+│   ├── tile-cache.js
+│   ├── bg-layer.js
+│   ├── bg-region-layer.js
+│   ├── sprite-layer.js
+│   ├── debug-overlay.js
+│   ├── annotation-popover.js
+│   ├── mutation-counter.js
+│   ├── nametable-viewer.js
+│   ├── palette-viewer.js
+│   ├── oam-viewer.js
+│   └── chr-viewer.js
+└── tests/
+    ├── unit/
+    ├── dom/
+    └── e2e/
 ```
 
 ## Testing
 
 ```bash
-npm test         # unit + DOM tests (vitest + happy-dom)
-npm run test:e2e # visual regression tests (playwright)
+npm test
+npm run test:e2e
 ```
 
-92 unit/DOM tests cover palette management, tile caching, CHR bank-switch detection, BG layer diffing, sprite layer updates, and renderer orchestration. E2e tests use Playwright for CSS-vs-canvas visual comparison.
+Latest local run in this workspace (2026-02-27):
 
-## The Absurdity in Detail
+- `npm test`: 11 files, 114 tests passed
+- `npm run test:e2e`: 5 Playwright tests passed
+- `npm run build`: production build succeeded
 
-A `<canvas>` renderer does this per frame: loop over 61,440 pixels, write RGBA values to an `ImageData`, call `putImageData()`. Done. One
+E2E tests use ROMs from `roms/` and compare CSS output against a canvas reference (pixel diff thresholds vary by scenario).
 
-This renderer, per frame:
+## Known Gaps
 
-1. Reads ~20 PPU register values and references to 4 nametable arrays, 512 tile objects, and 64 sprites
-2. Compares 32 palette entries against their previous values to determine which of 8 palette groups are dirty
-3. Checks 8 CHR bank region references for object-identity changes (mapper bank switches), then checksums all 512 tiles for in-place CHR-RAM modifications
-4. For each dirty palette group + dirty CHR bank combination, iterates 256 tiles x 64 pixels = 16,384 pixel lookups, writes them into a 128x128 `ImageData`, calls `putImageData()`, then `toDataURL('image/png')` to produce a base64 PNG string
-5. Concatenates up to 12 of these base64 PNGs (each ~10-20KB of ASCII) into CSS rules and writes them to a `<style>` element's `textContent`, triggering a full CSSOM reparse
-6. Iterates 3,840 tile slots across 4 nametable quadrants, comparing tile index and attribute against previous values, and for each changed tile sets `className`, `style.backgroundPosition`, and up to 4 `dataset` properties
-7. Repositions 4 absolutely-positioned 256x240 CSS Grid containers based on scroll registers to handle nametable wrapping in a 512x480 virtual space
-8. Updates 64 sprite divs with position, z-index, transform (for flip), class (for palette spritesheet), background-position (for tile selection), and 8 data attributes each
-9. Updates 5 debug overlay layers: recalculates palette region colors from attribute tables, repositions scroll-split and nametable-seam markers
-10. Sets the viewport's `backgroundColor` to the NES universal background color
-
-The browser then takes this pile of DOM mutations, recalculates styles, reflows the grid layouts, composites the layers, and somehow produces a frame that looks correct. At 60fps. Mostly.
-
-For comparison: the NES PPU does all of this in hardware with a 5.37 MHz clock, 2KB of VRAM, and no opinions about CSS specificity.
-
-## Known Limitations
-
-- **Split timing is scanline-granular** — multi-split support is experimental and not cycle-accurate yet
-- **BG priority is z-index based** — no per-pixel transparency check for sprites behind BG
-- **No audio** — visual rendering only
-- **8x16 sprites** — basic support, may have edge cases with CHR bank selection
+- Region timing is scanline-level modeling, not cycle-accurate.
+- Region compositor currently uses at most 2 vertical regions.
+- Sprite priority vs BG is approximated with z-index, so per-pixel NES priority behavior is not exact.
+- No audio output (audio samples are discarded).
 
 ## Credits
 
-Built on [jsnes](https://github.com/bfirsh/jsnes) by [Ben Firshman](https://github.com/bfirsh) and contributors — a JavaScript NES emulator that does all the actual hard work of emulating a 6502 CPU, PPU, and cartridge mappers. This project just reads the PPU state jsnes computes and renders it in the worst way possible.
+Powered by [jsnes](https://github.com/bfirsh/jsnes) (`jsnes@1.2.1`), created by Ben Firshman and maintained by contributors (Apache-2.0).
+
+jsnes does the actual emulation work (CPU/PPU/mappers/input/audio plumbing). This project reads jsnes PPU state and renders it as DOM/CSS layers, plus debugger-style inspection tools.
