@@ -395,9 +395,9 @@ export class TileCache {
 
       for (let py = 0; py < 8; py++) {
         for (let px = 0; px < 8; px++) {
-          const colorIdx = tile.pix[(py << 3) + px];
+          const colorIdx = tile.pix[(py << 3) + px] | 0;
           const destOffset = ((baseY + py) * 128 + (baseX + px)) * 4;
-          if (colorIdx === 0) {
+          if (colorIdx <= 0 || colorIdx >= rgb.length || !rgb[colorIdx]) {
             data[destOffset] = 0;
             data[destOffset + 1] = 0;
             data[destOffset + 2] = 0;

@@ -65,6 +65,21 @@ describe('TileCache (DOM)', () => {
     }
   });
 
+  it('ignores out-of-range tile palette indices without crashing', () => {
+    const tc = new TileCache();
+    const pm = new PaletteManager();
+    const bg = new Array(16).fill(0);
+    const spr = new Array(16).fill(0);
+    const ptTile = createPtTile();
+
+    // Repro for ROMs that can expose transient/invalid decoded pixel values.
+    ptTile[0].pix[0] = 255;
+    ptTile[0].pix[1] = 9;
+
+    pm.update(bg, spr);
+    expect(() => tc.update(ptTile, pm, 0, 0, bankSig(ptTile))).not.toThrow();
+  });
+
   it('update skips sheets when nothing changed', () => {
     const tc = new TileCache();
     const pm = new PaletteManager();

@@ -4,6 +4,36 @@
   box-sizing: border-box;
 }
 
+@property --cam-tilt-offset {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --cam-yaw-offset {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --cam-zoom {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
+@property --cam-pan-x {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --cam-pan-y {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 body {
   background: #1a1a2e;
   color: #e0e0e0;
@@ -85,6 +115,56 @@ h1 {
   user-select: none;
 }
 
+.shortcut-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: #111124;
+  border: 1px solid #262645;
+  border-radius: 4px;
+  max-width: 920px;
+}
+
+.shortcut-title {
+  font-size: 0.68rem;
+  color: #7fdbca;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 3px 6px;
+  margin-right: 2px;
+  align-self: center;
+}
+
+.shortcut-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  color: #c0c0d0;
+  background: #1d1d38;
+  border: 1px solid #2f2f56;
+  border-radius: 3px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 4px;
+  border: 1px solid #6f6fa0;
+  border-bottom-width: 2px;
+  border-radius: 3px;
+  background: #2a2a4a;
+  color: #e6e6ff;
+  font-family: inherit;
+  font-size: 0.66rem;
+  line-height: 1.2;
+}
+
 /* Layer toggles */
 .layer-toggle.active {
   background: #2a4a3a;
@@ -104,6 +184,18 @@ h1 {
   color: #bbaafe;
 }
 
+#btn-isometric.active {
+  background: #4a3522;
+  border-color: #b98a54;
+  color: #ffd39a;
+}
+
+#btn-ultrawide.active {
+  background: #253f52;
+  border-color: #5a9bc2;
+  color: #bde7ff;
+}
+
 #fps-counter {
   font-size: 0.75rem;
   color: #7fdbca;
@@ -111,9 +203,16 @@ h1 {
 
 /* Render area — reserves space for the 3x scaled viewport */
 .render-area {
+  --cam-tilt-offset: 0deg;
+  --cam-yaw-offset: 0deg;
+  --cam-zoom: 1;
+  --cam-pan-x: 0px;
+  --cam-pan-y: 0px;
   width: 768px;   /* 256 * 3 */
   height: 720px;  /* 240 * 3 */
   position: relative;
+  transition: filter 0.2s ease, transform 0.2s ease;
+  transform-style: preserve-3d;
 }
 
 /* Viewport wrapper — applies scale, positioned within the reserved area */
@@ -123,6 +222,7 @@ h1 {
   position: absolute;
   top: 0;
   left: 0;
+  transition: transform 0.22s ease;
 }
 
 /* The NES viewport — 256×240 visible area */
@@ -133,6 +233,167 @@ h1 {
   position: relative;
   background: #000;
   image-rendering: pixelated;
+  transition: filter 0.22s ease;
+}
+
+/* Isometric pseudo-3D mode */
+.render-area.isometric-mode {
+  --iso-x: 122px;
+  --iso-y: 96px;
+  --iso-scale: 2.92;
+  --iso-tilt: 44deg;
+  --iso-yaw: -22deg;
+  --iso-spr-x: 6px;
+  --iso-spr-y: -8px;
+  --iso-spr-z: 14px;
+  --iso-shadow-color: rgba(0, 0, 0, 0.56);
+  --iso-shadow-core: rgba(0, 0, 0, 0.34);
+  --iso-shadow-skew: -28deg;
+  --iso-shadow-y: 2px;
+  --iso-shadow-scale: 1.55;
+  perspective: 1320px;
+  perspective-origin: 50% 76%;
+  filter: saturate(1.07) contrast(1.02);
+  transition:
+    filter 0.2s ease,
+    transform 0.2s ease,
+    --cam-tilt-offset 180ms ease-out,
+    --cam-yaw-offset 200ms ease-out,
+    --cam-zoom 220ms ease-out,
+    --cam-pan-x 180ms ease-out,
+    --cam-pan-y 180ms ease-out;
+}
+
+.render-area.isometric-mode::before {
+  content: '';
+  position: absolute;
+  left: 170px;
+  top: 408px;
+  width: 420px;
+  height: 128px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.36) 0%, rgba(0, 0, 0, 0) 72%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.render-area.isometric-mode .viewport-wrapper {
+  transform-origin: 128px 240px;
+  transform:
+    translate(calc(var(--iso-x) + var(--cam-pan-x)), calc(var(--iso-y) + var(--cam-pan-y)))
+    rotateX(calc(var(--iso-tilt) + var(--cam-tilt-offset)))
+    rotateZ(calc(var(--iso-yaw) + var(--cam-yaw-offset)))
+    scale(calc(var(--iso-scale) * var(--cam-zoom)));
+  z-index: 1;
+}
+
+.render-area.isometric-mode .nes-viewport {
+  overflow: visible;
+  transform-style: preserve-3d;
+  filter: drop-shadow(0 12px 8px rgba(0, 0, 0, 0.2));
+}
+
+.render-area.isometric-mode .nes-viewport::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 256px;
+  height: 240px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(0, 0, 0, 0.08) 100%);
+  pointer-events: none;
+}
+
+.render-area.isometric-mode .bg-layer,
+.render-area.isometric-mode .bg-region-layer {
+  filter: brightness(0.92) saturate(0.96);
+}
+
+.render-area.isometric-mode .sprite-layer {
+  transform: translate3d(var(--iso-spr-x), var(--iso-spr-y), var(--iso-spr-z));
+  filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.24)) drop-shadow(0 6px 6px rgba(0, 0, 0, 0.22));
+}
+
+.render-area.isometric-mode .sprite,
+.render-area.isometric-mode .sprite-8x16 {
+  overflow: visible;
+}
+
+.render-area.isometric-mode .sprite::before,
+.render-area.isometric-mode .sprite-8x16::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 10px;
+  height: 3px;
+  border-radius: 50%;
+  background:
+    radial-gradient(
+      ellipse at center,
+      var(--iso-shadow-color) 0%,
+      var(--iso-shadow-core) 56%,
+      rgba(0, 0, 0, 0) 100%
+    );
+  transform: translate(-50%, var(--iso-shadow-y)) scaleX(var(--iso-shadow-scale)) skewX(var(--iso-shadow-skew));
+  filter: blur(1.1px);
+  mix-blend-mode: multiply;
+  opacity: 0.94;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.render-area.isometric-mode .sprite-8x16::before {
+  width: 13px;
+  height: 4px;
+}
+
+.render-area.isometric-mode .sprite[data-flip-v='1']::before,
+.render-area.isometric-mode .sprite-8x16[data-flip-v='1']::before {
+  top: 0;
+}
+
+.render-area.isometric-mode .sprite[data-priority='behind-bg']::before,
+.render-area.isometric-mode .sprite-8x16[data-priority='behind-bg']::before {
+  opacity: 0.52;
+  filter: blur(0.9px);
+}
+
+.render-area.isometric-mode .debug-overlay {
+  opacity: 0.65;
+}
+
+/* Ultra-wide mode: 512px horizontal world strip */
+.render-area.ultra-wide:not(.isometric-mode) {
+  width: 768px;   /* 512 * 1.5 */
+  height: 360px;  /* 240 * 1.5 */
+}
+
+.render-area.ultra-wide:not(.isometric-mode) .viewport-wrapper {
+  transform-origin: top left;
+  transform: scale(1.5);
+}
+
+.render-area.ultra-wide:not(.isometric-mode) .nes-viewport {
+  width: 512px;
+  height: 240px;
+}
+
+.render-area.ultra-wide:not(.isometric-mode) .sprite-layer,
+.render-area.ultra-wide:not(.isometric-mode) .bg-region-layer,
+.render-area.ultra-wide:not(.isometric-mode) .bg-region-band,
+.render-area.ultra-wide:not(.isometric-mode) .bg-region-viewport {
+  width: 512px;
+}
+
+.render-area.ultra-wide:not(.isometric-mode) .debug-overlay-tile-grid,
+.render-area.ultra-wide:not(.isometric-mode) .debug-overlay-palette-regions,
+.render-area.ultra-wide:not(.isometric-mode) .debug-overlay-scroll-split,
+.render-area.ultra-wide:not(.isometric-mode) .debug-overlay-nt-seam-h {
+  width: 512px;
+}
+
+.render-area.ultra-wide:not(.isometric-mode) .debug-overlay-palette-regions {
+  grid-template-columns: repeat(32, 16px);
 }
 
 /* Background layer — holds nametable containers, scrolled via transform */

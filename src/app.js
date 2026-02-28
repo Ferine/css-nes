@@ -68,6 +68,184 @@ function renderCanvasFrame(buffer) {
   compareCtx.putImageData(imgData, 0, 0);
 }
 
+// --- Iso camera micro-motion (typed CSS vars + inertial updates) ---
+const isoCamera = {
+  yawOffset: 0,
+  tiltOffset: 0,
+  zoom: 1,
+  panX: 0,
+  panY: 0,
+  lastScrollX: null,
+  lastScrollY: null,
+};
+
+const movementIntent = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+};
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function wrappedDelta(current, previous, period) {
+  let delta = current - previous;
+  const half = period / 2;
+  if (delta > half) delta -= period;
+  if (delta < -half) delta += period;
+  return delta;
+}
+
+function getWorldScroll(ppuState) {
+  const s = ppuState?.scroll;
+  if (!s) return null;
+  return {
+    x: s.coarseX * 8 + s.fineX + s.nameTableH * 256,
+    y: s.coarseY * 8 + s.fineY + s.nameTableV * 240,
+  };
+}
+
+function toUltraWideState(ppuState) {
+  if (!ultraWideMode || !ppuState) return ppuState;
+
+  const world = getWorldScroll(ppuState);
+  const scrollX = world ? ((world.x % 512) + 512) % 512 : 0;
+  const baseScroll = ppuState.scroll || {
+    coarseX: 0,
+    coarseY: 0,
+    fineX: 0,
+    fineY: 0,
+    nameTableH: 0,
+    nameTableV: 0,
+  };
+  const wideScroll = {
+    ...baseScroll,
+    coarseX: 0,
+    fineX: 0,
+    nameTableH: 0,
+  };
+
+  const scrollY = wideScroll.coarseY * 8 + wideScroll.fineY + wideScroll.nameTableV * 240;
+  const remappedSprites = Array.isArray(ppuState.sprites)
+    ? ppuState.sprites.map((spr) => ({
+      ...spr,
+      x: ((spr.x + scrollX) % 512 + 512) % 512,
+    }))
+    : ppuState.sprites;
+
+  const firstRegion = Array.isArray(ppuState.renderPlan?.regions) && ppuState.renderPlan.regions.length > 0
+    ? ppuState.renderPlan.regions[0]
+    : null;
+  const region = {
+    yStart: 0,
+    yEnd: 240,
+    scroll: wideScroll,
+    scrollX: 0,
+    scrollY,
+    bgVisible: ppuState.bgVisible,
+    spritesVisible: ppuState.spritesVisible,
+    bgPatternBase: ppuState.bgPatternBase,
+    sprPatternBase: ppuState.sprPatternBase,
+    spriteSize: ppuState.spriteSize,
+    mirrorMap: ppuState.mirrorMap,
+    chrSignature: ppuState.chrBankSignature,
+    chrSetKey: firstRegion?.chrSetKey ?? ppuState.chrSetKey,
+  };
+
+  return {
+    ...ppuState,
+    scroll: wideScroll,
+    sprites: remappedSprites,
+    renderPlan: {
+      ...ppuState.renderPlan,
+      mode: 'single',
+      splitCount: 0,
+      canonicalSplitCount: 0,
+      canonicalRegionCount: 1,
+      regions: [region],
+      canonicalRegions: [region],
+    },
+  };
+}
+
+function applyIsoCameraVars() {
+  if (!renderAreaEl) return;
+  renderAreaEl.style.setProperty('--cam-tilt-offset', `${isoCamera.tiltOffset.toFixed(3)}deg`);
+  renderAreaEl.style.setProperty('--cam-yaw-offset', `${isoCamera.yawOffset.toFixed(3)}deg`);
+  renderAreaEl.style.setProperty('--cam-zoom', isoCamera.zoom.toFixed(4));
+  renderAreaEl.style.setProperty('--cam-pan-x', `${isoCamera.panX.toFixed(3)}px`);
+  renderAreaEl.style.setProperty('--cam-pan-y', `${isoCamera.panY.toFixed(3)}px`);
+}
+
+function resetIsoCameraMotion() {
+  isoCamera.yawOffset = 0;
+  isoCamera.tiltOffset = 0;
+  isoCamera.zoom = 1;
+  isoCamera.panX = 0;
+  isoCamera.panY = 0;
+  isoCamera.lastScrollX = null;
+  isoCamera.lastScrollY = null;
+  applyIsoCameraVars();
+}
+
+function updateIsoCameraMotion(ppuState) {
+  if (!isometricMode) return;
+
+  let velX = 0;
+  let velY = 0;
+  const world = getWorldScroll(ppuState);
+
+  if (world) {
+    if (isoCamera.lastScrollX === null || isoCamera.lastScrollY === null) {
+      isoCamera.lastScrollX = world.x;
+      isoCamera.lastScrollY = world.y;
+    } else {
+      velX = wrappedDelta(world.x, isoCamera.lastScrollX, 512);
+      velY = wrappedDelta(world.y, isoCamera.lastScrollY, 480);
+      isoCamera.lastScrollX = world.x;
+      isoCamera.lastScrollY = world.y;
+    }
+  } else {
+    isoCamera.lastScrollX = null;
+    isoCamera.lastScrollY = null;
+  }
+
+  velX = clamp(velX, -8, 8);
+  velY = clamp(velY, -6, 6);
+
+  const inputX = (movementIntent.right ? 1 : 0) - (movementIntent.left ? 1 : 0);
+  const inputY = (movementIntent.down ? 1 : 0) - (movementIntent.up ? 1 : 0);
+  const speed = Math.hypot(velX, velY);
+
+  const targetYawOffset = clamp((-velX * 0.42) + (inputX * -1.1), -3.2, 3.2);
+  const targetTiltOffset = clamp((velY * 0.3) + (inputY * 0.95), -2.6, 2.6);
+  const targetZoom = clamp(1 + speed * 0.0038 + ((inputX || inputY) ? 0.01 : 0), 1, 1.05);
+  const targetPanX = clamp((-velX * 0.9) + (inputX * -2.2), -9, 9);
+  const targetPanY = clamp((-velY * 0.65) + (inputY * -1.4), -7, 7);
+
+  const motionLerp = running && !paused ? 0.14 : 0.2;
+  const zoomLerp = running && !paused ? 0.1 : 0.16;
+  isoCamera.yawOffset += (targetYawOffset - isoCamera.yawOffset) * motionLerp;
+  isoCamera.tiltOffset += (targetTiltOffset - isoCamera.tiltOffset) * motionLerp;
+  isoCamera.panX += (targetPanX - isoCamera.panX) * motionLerp;
+  isoCamera.panY += (targetPanY - isoCamera.panY) * motionLerp;
+  isoCamera.zoom += (targetZoom - isoCamera.zoom) * zoomLerp;
+
+  applyIsoCameraVars();
+}
+
+function setMovementIntent(button, isDown) {
+  switch (button) {
+    case 4: movementIntent.up = isDown; break;
+    case 5: movementIntent.down = isDown; break;
+    case 6: movementIntent.left = isDown; break;
+    case 7: movementIntent.right = isDown; break;
+    default: break;
+  }
+}
+
 // --- Game Loop ---
 let running = false;
 let paused = false;
@@ -137,18 +315,22 @@ function gameLoop(timestamp) {
 
   // Render to active mode
   if (latestPPUState) {
+    const effectivePPUState = toUltraWideState(latestPPUState);
     if (canvasMode) {
       renderCanvasFrame(latestPPUState.buffer);
       mutCounter.snapshot();
       updateStats(null, 0, 0, 0);
     } else {
-      renderer.renderFrame(latestPPUState);
+      renderer.renderFrame(effectivePPUState);
       const mutCount = mutCounter.snapshot();
       const domNodes = renderer.viewport.getElementsByTagName('*').length;
-      const visSprites = latestPPUState.sprites.filter(s => s.y > 0 && s.y < 239).length;
+      const visSprites = effectivePPUState.sprites.filter(s => s.y > 0 && s.y < 239).length;
       const sheetRegens = renderer.tileCache.updatedSheets.size;
       updateStats(mutCount, domNodes, visSprites, sheetRegens);
     }
+    updateIsoCameraMotion(effectivePPUState);
+  } else {
+    updateIsoCameraMotion(latestPPUState);
   }
 
   // FPS counter
@@ -191,6 +373,7 @@ function loadROM(data) {
   paused = false;
   renderer.viewport.classList.remove('paused');
   renderer.annotationPopover?.dismiss();
+  resetIsoCameraMotion();
   updateButtonStates();
   document.getElementById('status-bar').textContent = 'Running';
   lastFrameTime = performance.now();
@@ -228,17 +411,41 @@ document.body.addEventListener('drop', (e) => {
 const btnPause = document.getElementById('btn-pause');
 const btnStep = document.getElementById('btn-step');
 const btnToggleCanvas = document.getElementById('btn-toggle-canvas');
+const btnIsometric = document.getElementById('btn-isometric');
+const btnUltraWide = document.getElementById('btn-ultrawide');
+const renderAreaEl = document.querySelector('.render-area');
 let canvasMode = false;
+let isometricMode = false;
+let ultraWideMode = false;
 
 function updateButtonStates() {
   btnPause.disabled = !running;
   btnStep.disabled = !running || !paused;
   btnToggleCanvas.disabled = !running;
+  btnUltraWide.disabled = !running || canvasMode;
   btnPause.textContent = paused ? 'Resume' : 'Pause';
   btnToggleCanvas.textContent = canvasMode ? 'CSS Mode' : 'Canvas Mode';
+  btnIsometric.classList.toggle('active', isometricMode);
+  btnIsometric.textContent = isometricMode ? 'Iso: On' : 'Iso Mode';
+  btnUltraWide.classList.toggle('active', ultraWideMode);
+  btnUltraWide.textContent = ultraWideMode ? 'Ultra: On' : 'Ultra Wide';
   // Sync layer toggle button states
   document.getElementById('layer-bg').classList.toggle('active', renderer.layerVisible.bg);
   document.getElementById('layer-sprites').classList.toggle('active', renderer.layerVisible.sprites);
+}
+
+function applyIsometricMode() {
+  renderAreaEl.classList.toggle('isometric-mode', isometricMode);
+  renderer.viewport.dataset.isometric = isometricMode ? '1' : '0';
+  resetIsoCameraMotion();
+  updateIsoCameraMotion(latestPPUState);
+  updateButtonStates();
+}
+
+function applyUltraWideMode() {
+  renderAreaEl.classList.toggle('ultra-wide', ultraWideMode);
+  renderer.viewport.dataset.ultraWide = ultraWideMode ? '1' : '0';
+  updateButtonStates();
 }
 
 btnPause.addEventListener('click', () => {
@@ -262,20 +469,47 @@ btnStep.addEventListener('click', () => {
   tracer?.beginFrame();
   nes.frame();
   if (latestPPUState) {
+    const effectivePPUState = toUltraWideState(latestPPUState);
     if (canvasMode) {
       renderCanvasFrame(latestPPUState.buffer);
     } else {
-      renderer.renderFrame(latestPPUState);
+      renderer.renderFrame(effectivePPUState);
     }
+    updateIsoCameraMotion(effectivePPUState);
+  } else {
+    updateIsoCameraMotion(latestPPUState);
   }
   document.getElementById('status-bar').textContent = `Paused — Frame ${renderer.frameCount}`;
 });
 
 btnToggleCanvas.addEventListener('click', () => {
   canvasMode = !canvasMode;
+  if (canvasMode && ultraWideMode) {
+    ultraWideMode = false;
+    applyUltraWideMode();
+  }
   wrapperEl.style.display = canvasMode ? 'none' : '';
   compareCanvas.classList.toggle('active', canvasMode);
   updateButtonStates();
+});
+
+btnIsometric.addEventListener('click', () => {
+  if (!isometricMode && ultraWideMode) {
+    ultraWideMode = false;
+    applyUltraWideMode();
+  }
+  isometricMode = !isometricMode;
+  applyIsometricMode();
+});
+
+btnUltraWide.addEventListener('click', () => {
+  if (canvasMode) return;
+  if (!ultraWideMode && isometricMode) {
+    isometricMode = false;
+    applyIsometricMode();
+  }
+  ultraWideMode = !ultraWideMode;
+  applyUltraWideMode();
 });
 
 // --- Keyboard Input ---
@@ -285,6 +519,7 @@ document.addEventListener('keydown', (e) => {
   const btn = getButton(e);
   if (btn !== null) {
     nes.buttonDown(1, btn);
+    setMovementIntent(btn, true);
     e.preventDefault();
   }
 });
@@ -294,6 +529,7 @@ document.addEventListener('keyup', (e) => {
   const btn = getButton(e);
   if (btn !== null) {
     nes.buttonUp(1, btn);
+    setMovementIntent(btn, false);
     e.preventDefault();
   }
 });
@@ -312,6 +548,13 @@ function getButton(e) {
   if (e.code === 'ShiftRight') return 2;
   return null;
 }
+
+window.addEventListener('blur', () => {
+  movementIntent.up = false;
+  movementIntent.down = false;
+  movementIntent.left = false;
+  movementIntent.right = false;
+});
 
 // --- Layer Toggle Buttons ---
 const layerBgBtn = document.getElementById('layer-bg');
@@ -401,6 +644,18 @@ document.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Isometric toggle
+  if (e.key === 'i' || e.key === 'I') {
+    btnIsometric.click();
+    return;
+  }
+
+  // Ultra-wide toggle
+  if (e.key === 'u' || e.key === 'U') {
+    btnUltraWide.click();
+    return;
+  }
+
   // Debug overlay shortcuts
   const dbgName = debugShortcuts[e.key];
   if (dbgName) {
@@ -458,6 +713,40 @@ window.nesDebug = {
   get state() { return latestPPUState; },
   get nes() { return nes; },
   get annotate() { return renderer.annotationPopover; },
+  setIsometric(enabled) {
+    if (enabled && ultraWideMode) {
+      ultraWideMode = false;
+      applyUltraWideMode();
+    }
+    isometricMode = !!enabled;
+    applyIsometricMode();
+  },
+  toggleIsometric() {
+    if (!isometricMode && ultraWideMode) {
+      ultraWideMode = false;
+      applyUltraWideMode();
+    }
+    isometricMode = !isometricMode;
+    applyIsometricMode();
+  },
+  setUltraWide(enabled) {
+    if (enabled && isometricMode) {
+      isometricMode = false;
+      applyIsometricMode();
+    }
+    ultraWideMode = !!enabled;
+    applyUltraWideMode();
+  },
+  toggleUltraWide() {
+    if (!ultraWideMode && isometricMode) {
+      isometricMode = false;
+      applyIsometricMode();
+    }
+    ultraWideMode = !ultraWideMode;
+    applyUltraWideMode();
+  },
 };
 
+applyUltraWideMode();
+applyIsometricMode();
 updateButtonStates();

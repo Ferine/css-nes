@@ -18,6 +18,8 @@
       <button id="btn-pause" disabled>Pause</button>
       <button id="btn-step" disabled>Step</button>
       <button id="btn-toggle-canvas" disabled>Canvas Mode</button>
+      <button id="btn-isometric" title="Toggle pseudo-3D isometric view [I]">Iso Mode</button>
+      <button id="btn-ultrawide" title="Show full horizontal level strip [U]">Ultra Wide</button>
     </div>
 
     <div class="toolbar-group">
@@ -44,6 +46,21 @@
     </div>
   </div>
 
+  <div class="shortcut-strip" aria-label="Keyboard shortcuts">
+    <span class="shortcut-title">Keyboard</span>
+    <span class="shortcut-item"><kbd>Arrows</kbd> Move</span>
+    <span class="shortcut-item"><kbd>Z</kbd> A</span>
+    <span class="shortcut-item"><kbd>X</kbd> B</span>
+    <span class="shortcut-item"><kbd>Enter</kbd> Start</span>
+    <span class="shortcut-item"><kbd>Right Shift</kbd> Select</span>
+    <span class="shortcut-item"><kbd>B</kbd> BG</span>
+    <span class="shortcut-item"><kbd>S</kbd> Sprites</span>
+    <span class="shortcut-item"><kbd>I</kbd> Iso</span>
+    <span class="shortcut-item"><kbd>U</kbd> Ultra</span>
+    <span class="shortcut-item"><kbd>1-5</kbd> Debug</span>
+    <span class="shortcut-item"><kbd>N</kbd><kbd>P</kbd><kbd>O</kbd><kbd>C</kbd> Inspectors</span>
+  </div>
+
   <div class="main-content">
     <div class="render-area">
       <div class="viewport-wrapper" id="viewport-wrapper">
@@ -55,7 +72,7 @@
   </div>
 
   <div class="status-bar">
-    <span id="status-bar">Drop a .nes ROM or click Load ROM · Keys: arrows, Z=A, X=B, Enter=Start, RShift=Select</span>
+    <span id="status-bar">Drop a .nes ROM or click Load ROM · Keys: arrows, Z=A, X=B, Enter=Start, RShift=Select, U=Ultra</span>
     <span class="status-counters">
       <span id="fps-counter">-- fps</span>
       <span id="mut-counter" class="stat-dim">-- mut</span>

@@ -5,6 +5,8 @@
 export class DebugOverlay {
   constructor(viewport) {
     this.viewport = viewport;
+    this._maxPaletteCols = 32;
+    this._paletteRows = 15;
 
     // Overlay state
     this._active = {
@@ -24,12 +26,12 @@ export class DebugOverlay {
     // 2. Sprite Boxes — toggle class on sprite-layer (found in viewport)
     this.spriteLayerEl = viewport.querySelector('.sprite-layer');
 
-    // 3. Palette Regions — 16×15 grid of 16px divs
+    // 3. Palette Regions — supports up to 32×15 in ultra-wide mode
     this.paletteRegionsEl = document.createElement('div');
     this.paletteRegionsEl.className = 'debug-overlay debug-overlay-palette-regions';
     this.paletteRegionsEl.style.display = 'none';
     this._paletteBlocks = [];
-    for (let i = 0; i < 16 * 15; i++) {
+    for (let i = 0; i < this._maxPaletteCols * this._paletteRows; i++) {
       const block = document.createElement('div');
       block.className = 'palette-block';
       this.paletteRegionsEl.appendChild(block);
@@ -122,14 +124,16 @@ export class DebugOverlay {
   }
 
   _updatePaletteRegions(ppuState) {
+    const cols = this.viewport.clientWidth >= 512 ? 32 : 16;
+    const rows = this._paletteRows;
     const s = ppuState.scroll;
     const scrollX = s.coarseX * 8 + s.fineX + s.nameTableH * 256;
     const scrollY = s.coarseY * 8 + s.fineY + s.nameTableV * 240;
     const mirrorMap = ppuState.mirrorMap;
     const nameTables = ppuState.nameTables;
 
-    for (let row = 0; row < 15; row++) {
-      for (let col = 0; col < 16; col++) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
         // Screen pixel position of this 16×16 block
         const pixX = col * 16 + scrollX;
         const pixY = row * 16 + scrollY;
@@ -166,9 +170,15 @@ export class DebugOverlay {
           palGroup = nt.attrib[tileIdx] & 3;
         }
 
-        const block = this._paletteBlocks[row * 16 + col];
+        const block = this._paletteBlocks[row * this._maxPaletteCols + col];
+        block.style.display = '';
         block.style.backgroundColor = this._paletteColors[palGroup];
       }
+    }
+
+    const visibleCount = rows * cols;
+    for (let i = visibleCount; i < this._paletteBlocks.length; i++) {
+      this._paletteBlocks[i].style.display = 'none';
     }
   }
 
@@ -183,22 +193,24 @@ export class DebugOverlay {
   }
 
   _updateNametableSeam(ppuState) {
+    const viewportWidth = this.viewport.clientWidth || 256;
+    const viewportHeight = this.viewport.clientHeight || 240;
     const s = ppuState.scroll;
     const scrollX = s.coarseX * 8 + s.fineX + s.nameTableH * 256;
     const scrollY = s.coarseY * 8 + s.fineY + s.nameTableV * 240;
 
-    // Vertical seam: nametable boundary within the 256px viewport
+    // Vertical seam: nametable boundary within the viewport
     const seamX = 256 - (scrollX % 256);
-    if (seamX > 0 && seamX < 256 && scrollX > 0) {
+    if (seamX > 0 && seamX < viewportWidth && scrollX > 0) {
       this.ntSeamVEl.style.display = '';
       this.ntSeamVEl.style.left = `${seamX}px`;
     } else {
       this.ntSeamVEl.style.display = 'none';
     }
 
-    // Horizontal seam: nametable boundary within the 240px viewport
+    // Horizontal seam: nametable boundary within the viewport
     const seamY = 240 - (scrollY % 240);
-    if (seamY > 0 && seamY < 240 && scrollY > 0) {
+    if (seamY > 0 && seamY < viewportHeight && scrollY > 0) {
       this.ntSeamHEl.style.display = '';
       this.ntSeamHEl.style.top = `${seamY}px`;
     } else {
