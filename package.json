@@ -1,5 +1,5 @@
 {
-  "name": "css-snes",
+  "name": "css-nes",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "jsnes": "^1.2.1"
+    "@vitejs/plugin-vue": "^6.0.4",
+    "jsnes": "^1.2.1",
+    "vue": "^3.5.29"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

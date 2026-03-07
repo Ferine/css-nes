@@ -396,10 +396,18 @@ romInput.addEventListener('change', (e) => {
 document.body.addEventListener('dragover', (e) => {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'copy';
+  document.body.classList.add('dragover');
+});
+
+document.body.addEventListener('dragleave', (e) => {
+  if (e.relatedTarget === null || !document.body.contains(e.relatedTarget)) {
+    document.body.classList.remove('dragover');
+  }
 });
 
 document.body.addEventListener('drop', (e) => {
   e.preventDefault();
+  document.body.classList.remove('dragover');
   const file = e.dataTransfer.files[0];
   if (!file) return;
   const reader = new FileReader();
