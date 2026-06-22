@@ -32,7 +32,7 @@ export class CSSRenderer {
     this.bgRegionLayer = new BGRegionLayer(this.viewport);
     this.spriteLayer = new SpriteLayer(this.viewport);
     this.debugOverlay = new DebugOverlay(this.viewport);
-    this.annotationPopover = null; // initialized by app.js with PPU state getter
+    this.annotationPopover = null; // initialized by App.vue via initAnnotation()
 
     // Inspector panels — initialized later via initInspector()
     this.inspectorPanels = null;

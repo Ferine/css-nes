@@ -119,7 +119,8 @@ css-nes/
 ├── index.html
 ├── styles/nes-layers.css
 ├── src/
-│   ├── app.js
+│   ├── main.js
+│   ├── App.vue
 │   ├── css-renderer.js
 │   ├── ppu-state-extractor.js
 │   ├── ppu-write-tracer.js
@@ -167,6 +168,6 @@ E2E tests use ROMs from `roms/` and compare CSS output against a canvas referenc
 
 ## Credits
 
-Powered by [jsnes](https://github.com/bfirsh/jsnes) (`jsnes@1.2.1`), created by Ben Firshman and maintained by contributors (Apache-2.0).
+Powered by [jsnes](https://github.com/bfirsh/jsnes) (`jsnes@2.0.0`), created by Ben Firshman and maintained by contributors (Apache-2.0).
 
 jsnes does the actual emulation work (CPU/PPU/mappers/input/audio plumbing). This project reads jsnes PPU state and renders it as DOM/CSS layers, plus debugger-style inspection tools.

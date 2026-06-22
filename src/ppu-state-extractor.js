@@ -47,7 +47,7 @@ export class PPUStateExtractor {
     });
 
     return {
-      // Palettes — 16 entries each, packed 0xRRGGBB
+      // Palettes — 16 entries each, packed 0xBBGGRR (jsnes Uint32 canvas-LE format)
       bgPalette: ppu.imgPalette.slice(0, 16),
       sprPalette: ppu.sprPalette.slice(0, 16),
 
