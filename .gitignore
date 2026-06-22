@@ -5,3 +5,4 @@ dist/
 tests/e2e/test-results/
 playwright-report/
 /.claude/hooks
+.claude/worktrees/exciting-roentgen/
